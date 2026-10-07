@@ -66,7 +66,7 @@ describe("runReverify", () => {
     });
     expect(markOk).toHaveBeenCalledWith(1, expect.any(Date));
     expect(markFailed).toHaveBeenCalledWith(2, expect.any(Date), 1);
-    expect(markStale).toHaveBeenCalledWith(3, expect.any(Date));
+    expect(markStale).toHaveBeenCalledWith(3, expect.any(Date), 1);
     // network errors touch nothing: no failure recorded, no stale
     expect(markFailed).toHaveBeenCalledTimes(1);
     expect(markStale).toHaveBeenCalledTimes(1);
@@ -81,7 +81,7 @@ describe("runReverify", () => {
     expect(markFailed).toHaveBeenCalledWith(1, expect.any(Date), 1);
     expect(markStale).not.toHaveBeenCalled();
     await runReverify({ ...deps, listActive: async () => [claim(1, 1)], check: async () => ({ id: "proof", ok: false }) });
-    expect(markStale).toHaveBeenCalledWith(1, expect.any(Date));
+    expect(markStale).toHaveBeenCalledWith(1, expect.any(Date), 1);
   });
 
   it("a prune failure does not lose the report", async () => {
@@ -125,12 +125,35 @@ describe("checkReachable with several proof methods", () => {
     };
     expect(await checkReachable("example.com", "i", fetcher, async () => [])).toMatchObject({ ok: true });
   });
+
+  it("a real failure of the primary file is not inconclusive when only a secondary fetch threw (L5)", async () => {
+    // Web: well-known answers 404, the home page (meta method) throws.
+    const web = async (url: string) => {
+      if (url.includes(".well-known")) return { status: 404, body: "" };
+      throw new Error("ECONNRESET");
+    };
+    expect(await checkReachable("example.com", "i", web, async () => [])).toMatchObject({ ok: false });
+    // Repo: the repo file answers bad JSON, the account-level files throw.
+    const repo = async (url: string) => {
+      if (url.includes("/org/repo/")) return { status: 200, body: "not json" };
+      throw new Error("ETIMEDOUT");
+    };
+    expect(await checkReachable("github.com/org/repo", "i", repo, async () => [])).toMatchObject({ ok: false });
+  });
+
+  it("still inconclusive when the primary threw, even if secondaries answered with failures", async () => {
+    const repo = async (url: string) => {
+      if (url.includes("/org/repo/")) throw new Error("ECONNRESET");
+      return { status: 404, body: "" };
+    };
+    await expect(checkReachable("github.com/org/repo", "i", repo, async () => [])).rejects.toBeInstanceOf(ProofUnreachableError);
+  });
 });
 
 describe("github job", () => {
   it("parses repo urls", () => {
-    expect(parseRepo("https://github.com/Org/repo")).toEqual({ owner: "Org", repo: "repo" });
-    expect(parseRepo("github.com/Org/repo.git/")).toEqual({ owner: "Org", repo: "repo" });
+    expect(parseRepo("https://github.com/Org/repo")).toEqual({ owner: "org", repo: "repo" });
+    expect(parseRepo("github.com/Org/repo.git/")).toEqual({ owner: "org", repo: "repo" });
     expect(parseRepo("https://example.com/a/b")).toBeNull();
   });
 

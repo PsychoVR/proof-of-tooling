@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { claims, tools } from "@/db/schema";
 import { pruneOrphanTools } from "@/jobs/prune";
-import { checkProofFile, type Fetcher, type TxtResolver } from "@/lib/claims";
+import { checkProofFile, proofFileUrl, type Fetcher, type TxtResolver } from "@/lib/claims";
 import { resolveTxt } from "@/lib/dns-txt";
 import { safeFetcher } from "@/lib/safe-fetch";
 import type { ClaimCheckResult } from "@/lib/types";
@@ -23,7 +23,10 @@ export class ProofUnreachableError extends Error {}
 
 /**
  * checkProofFile reports a thrown fetch as a failed proof. Wrapping the fetcher tells those apart
- * from real failures (HTTP errors, missing identity, bad JSON): a network error is rethrown.
+ * from real failures (HTTP errors, missing identity, bad JSON): a network error is rethrown, but
+ * only when the primary location (the repo file, or the web well-known file) threw. If the primary
+ * answered with a real failure and only a secondary fetch (account-level file, home page meta tag)
+ * threw, the claim is not proven and that counts as a real failure.
  */
 export async function checkReachable(
   toolUrl: string,
@@ -32,12 +35,13 @@ export async function checkReachable(
   resolver: TxtResolver = resolveTxt,
   check: typeof checkProofFile = checkProofFile,
 ): Promise<ClaimCheckResult> {
+  const primary = proofFileUrl(toolUrl)?.url;
   let threw = false;
   const res = await check(toolUrl, identity, async (url) => {
     try {
       return await fetcher(url);
     } catch (err) {
-      threw = true;
+      if (url === primary) threw = true;
       throw err;
     }
   }, resolver);
@@ -50,9 +54,13 @@ export interface ReverifyDeps {
   listActive: () => Promise<ActiveClaim[]>;
   check: (toolUrl: string, identity: string) => Promise<ClaimCheckResult>;
   markOk: (id: number, now: Date) => Promise<void>;
-  /** Records a failed check; `failures` is the new consecutive count. */
+  /**
+   * Records a failed check; `failures` is the new consecutive count. Applies only if the claim is
+   * still active with `failures - 1` failures, so a concurrent re-claim is not overwritten.
+   */
   markFailed: (id: number, now: Date, failures: number) => Promise<void>;
-  markStale: (id: number, now: Date) => Promise<void>;
+  /** Turns the claim stale, only if it is still active with `readFailures` failures (the value that was read). */
+  markStale: (id: number, now: Date, readFailures: number) => Promise<void>;
   /** Removes orphan tools; returns how many. */
   prune?: () => Promise<number>;
   now?: () => Date;
@@ -81,17 +89,25 @@ const defaults: ReverifyDeps = {
       .innerJoin(tools, eq(tools.id, claims.toolId))
       .where(eq(claims.status, "active")),
   check: (toolUrl, identity) => checkReachable(toolUrl, identity, safeFetcher),
+  // verifiedAt is the claim/approval date and feeds the 24h claim counter, so the cron only
+  // touches lastCheckedAt.
   markOk: async (id, now) => {
-    await getDb().update(claims).set({ verifiedAt: now, lastCheckedAt: now, failures: 0 }).where(eq(claims.id, id));
+    await getDb()
+      .update(claims)
+      .set({ lastCheckedAt: now, failures: 0 })
+      .where(and(eq(claims.id, id), eq(claims.status, "active")));
   },
   markFailed: async (id, now, failures) => {
-    await getDb().update(claims).set({ lastCheckedAt: now, failures }).where(eq(claims.id, id));
+    await getDb()
+      .update(claims)
+      .set({ lastCheckedAt: now, failures })
+      .where(and(eq(claims.id, id), eq(claims.status, "active"), eq(claims.failures, failures - 1)));
   },
-  markStale: async (id, now) => {
+  markStale: async (id, now, readFailures) => {
     await getDb()
       .update(claims)
       .set({ status: "stale", lastCheckedAt: now, failures: MAX_FAILURES })
-      .where(and(eq(claims.id, id), eq(claims.status, "active")));
+      .where(and(eq(claims.id, id), eq(claims.status, "active"), eq(claims.failures, readFailures)));
   },
 };
 
@@ -116,7 +132,7 @@ export async function runReverify(overrides: Partial<ReverifyDeps> = {}): Promis
       await deps.markOk(c.id, now);
       report.ok++;
     } else if (c.failures + 1 >= MAX_FAILURES) {
-      await deps.markStale(c.id, now);
+      await deps.markStale(c.id, now, c.failures);
       report.staled++;
     } else {
       await deps.markFailed(c.id, now, c.failures + 1);

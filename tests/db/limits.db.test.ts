@@ -115,4 +115,42 @@ describe("pruneOrphanTools and the failure counter (V4, B6)", () => {
     await runReverify({ check: fail, prune: async () => 0 });
     expect(await row()).toMatchObject({ status: "stale", failures: 2 });
   });
+
+  it("L6: re-verifying active claims does not count as new claims in the 24h window", async () => {
+    const { runReverify } = await import("@/jobs/reverify");
+    const id = V.laine.identity;
+    for (let i = 0; i < 6; i++) await save(`l6site${i}.com`, id);
+    await getDb().execute(sql`UPDATE claims SET verified_at = NOW() - INTERVAL 3 DAY WHERE identity = ${id}`);
+    await runReverify({ check: async () => ({ id: "proof" as const, ok: true }), prune: async () => 0 });
+    // the seed also gives this identity a stale claim, which the job never touches
+    const rows = await getDb().select().from(claims).where(and(eq(claims.identity, id), eq(claims.status, "active")));
+    expect(rows).toHaveLength(6);
+    expect(rows.every((r) => r.lastCheckedAt !== null && r.failures === 0)).toBe(true);
+    // The 7th new claim is not sent to review for "more than 5 in 24 hours".
+    expect(await save("l6new.com", id, { recheck: { now: new Date() } })).toMatchObject({ status: "active" });
+  });
+
+  it("L7: the writers do not overwrite a claim that changed since it was read", async () => {
+    const { runReverify } = await import("@/jobs/reverify");
+    const fail = async () => ({ id: "proof" as const, ok: false });
+    const pass = async () => ({ id: "proof" as const, ok: true });
+    await save("l7.example.com", V.quiet.identity);
+    const row = async () => (await getDb().select().from(claims).where(eq(claims.identity, V.quiet.identity)))[0];
+    const list = async () => [{ id: (await row()).id, toolUrl: "l7.example.com", identity: V.quiet.identity, failures: 0 }];
+
+    // The claim is withdrawn between the read and the write: no check result touches it.
+    for (const check of [fail, pass]) {
+      await getDb().update(claims).set({ status: "withdrawn", failures: 0, lastCheckedAt: null }).where(eq(claims.id, (await row()).id));
+      await runReverify({ listActive: list, check, prune: async () => 0 });
+      expect(await row()).toMatchObject({ status: "withdrawn", failures: 0, lastCheckedAt: null });
+    }
+    // A concurrent re-claim reset the counter after the read: the stale write is dropped.
+    await getDb().update(claims).set({ status: "active", failures: 0 }).where(eq(claims.id, (await row()).id));
+    const staleRead = async () => [{ id: (await row()).id, toolUrl: "l7.example.com", identity: V.quiet.identity, failures: 1 }];
+    await runReverify({ listActive: staleRead, check: fail, prune: async () => 0 }); // would mark stale
+    expect(await row()).toMatchObject({ status: "active", failures: 0 });
+    await getDb().update(claims).set({ failures: 1 }).where(eq(claims.id, (await row()).id));
+    await runReverify({ listActive: list, check: fail, prune: async () => 0 }); // read 0, now 1: failure count write dropped
+    expect(await row()).toMatchObject({ status: "active", failures: 1 });
+  });
 });

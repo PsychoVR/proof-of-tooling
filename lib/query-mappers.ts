@@ -95,7 +95,7 @@ export function buildToolsWithClaims(
   const nameMap = new Map(names.map((n) => [nameKey(n.identity, n.cluster), n.name]));
   const byTool = new Map<number, Claim[]>();
   for (const c of claimRows) {
-    if (c.status !== "active" && c.status !== "stale") continue;
+    if (c.status !== "active" && c.status !== "stale" && c.status !== "pending") continue;
     const list = byTool.get(c.toolId) ?? [];
     list.push(mapClaim(c));
     byTool.set(c.toolId, list);
@@ -103,7 +103,7 @@ export function buildToolsWithClaims(
   return toolRows.map((t) => {
     const cl = byTool.get(t.id) ?? [];
     const active = cl.filter((c) => c.status === "active");
-    const lead = active[0] ?? cl[0];
+    const lead = active[0] ?? cl.find((c) => c.status === "stale"); // pending claims never name an owner
     const seedName = seedByTool.get(t.id);
     const leadName = lead ? (nameMap.get(nameKey(lead.identity, lead.cluster)) ?? null) : null;
     const owner: ToolWithClaims["owner"] = lead

@@ -89,7 +89,7 @@ export function createClaimsDeps(): ClaimsDeps {
         await db.insert(tools).values({ slug: slugOf(input.toolUrl), url: input.toolUrl, name, category: input.category ?? "Ops script", kind });
         [tool] = await db.select().from(tools).where(eq(tools.url, input.toolUrl));
       }
-      const status = input.action === "claim" ? "active" : "withdrawn";
+      const status = input.action === "unclaim" ? "withdrawn" : input.pending ? "pending" : "active";
       await db
         .insert(claims)
         .values({ toolId: tool.id, identity: input.identity, cluster: input.cluster, message: input.message, signature: input.signature, signedDate: input.signedDate, status })

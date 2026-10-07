@@ -28,7 +28,7 @@ export function SiteHeader() {
         </Link>
         <span className="pill">
           <span className="dot" aria-hidden="true" />
-          Solana validators · mainnet + Alpenglow
+          Solana validators · mainnet · testnet · Alpenglow
         </span>
         <nav className="nav" aria-label="Sections">
           {LINKS.map((l) => (

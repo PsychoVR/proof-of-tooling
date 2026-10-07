@@ -33,3 +33,15 @@ describe("ui helpers", () => {
     expect(mockCheckClaim({ message: msg, signature: "short" }).ok).toBe(false);
   });
 });
+
+import { toolPillStatus } from "@/lib/ui/format";
+
+describe("toolPillStatus", () => {
+  const t = (status: "claimed" | "unclaimed", claims: { status: string; identity: string }[]) => ({ status, claims });
+  it("shows signed, in review or unclaimed", () => {
+    expect(toolPillStatus(t("claimed", []))).toBe("claimed");
+    expect(toolPillStatus(t("unclaimed", [{ status: "pending", identity: "A" }]))).toBe("pending");
+    expect(toolPillStatus(t("unclaimed", [{ status: "pending", identity: "A" }]), "B")).toBe("unclaimed");
+    expect(toolPillStatus(t("unclaimed", [{ status: "stale", identity: "A" }]))).toBe("unclaimed");
+  });
+});

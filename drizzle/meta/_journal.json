@@ -15,6 +15,13 @@
       "when": 1791367824485,
       "tag": "0001_neat_machine_man",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1791369701681,
+      "tag": "0002_wonderful_black_panther",
+      "breakpoints": true
     }
   ]
 }

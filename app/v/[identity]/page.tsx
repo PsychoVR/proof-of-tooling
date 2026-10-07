@@ -6,7 +6,7 @@ import { CodeBlock } from "@/components/CodeBlock";
 import { StatusPill } from "@/components/StatusPill";
 import { ToolChip } from "@/components/ToolChip";
 import { getValidatorProfile } from "@/lib/queries";
-import { CLUSTER_LABEL, displayName, formatDate, formatStake, safeHttpUrl } from "@/lib/ui/format";
+import { CLUSTER_LABEL, displayName, formatDate, formatStake, safeHttpUrl, toolPillStatus } from "@/lib/ui/format";
 
 export const dynamic = "force-dynamic";
 
@@ -77,7 +77,7 @@ export default async function ValidatorPage({ params }: Props) {
               {tools.map((t) => (
                 <li key={t.id}>
                   <ToolChip tool={t} />
-                  <StatusPill status={t.status} />
+                  <StatusPill status={toolPillStatus(t, v.identity)} />
                   <span className="vsub">{t.url}</span>
                 </li>
               ))}

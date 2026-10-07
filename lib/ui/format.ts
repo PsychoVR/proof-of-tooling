@@ -44,3 +44,13 @@ export function hostOf(url: string): string {
 }
 
 export const CLUSTER_LABEL = { mainnet: "Mainnet", testnet: "Testnet", alpenglow: "Alpenglow" } as const;
+
+/** Pill state for a tool on a validator or tool page: signed, waiting for review, or unclaimed. */
+export function toolPillStatus(
+  tool: { status: "claimed" | "unclaimed"; claims: { status: string; identity: string }[] },
+  identity?: string,
+): "claimed" | "pending" | "unclaimed" {
+  if (tool.status === "claimed") return "claimed";
+  const waiting = tool.claims.some((c) => c.status === "pending" && (!identity || c.identity === identity));
+  return waiting ? "pending" : "unclaimed";
+}

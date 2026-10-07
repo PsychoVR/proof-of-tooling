@@ -132,7 +132,7 @@ td.count { font-family: var(--f-display); font-weight: 800; font-size: 24px; fon
 .status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
 .status.claimed, .status.active { background: var(--ok-soft); color: var(--ok); }
 .status.unclaimed, .status.unknown { background: var(--surface-2); color: var(--muted); border: 1px dashed var(--line); }
-.status.stale, .status.slow, .status.dormant { background: var(--warn-soft); color: var(--warn); }
+.status.pending, .status.stale, .status.slow, .status.dormant { background: var(--warn-soft); color: var(--warn); }
 .status.withdrawn, .status.rejected { background: var(--bad-soft); color: var(--bad); }
 .empty { padding: 28px; text-align: center; color: var(--muted); }
 .note { font-size: 12px; color: var(--muted); margin-top: 8px; }

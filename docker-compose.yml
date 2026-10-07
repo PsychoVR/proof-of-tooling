@@ -1,0 +1,22 @@
+# Local development database. Matches the production engine (MariaDB 11.8).
+services:
+  db:
+    image: mariadb:11.8
+    ports:
+      - "3307:3306"
+    environment:
+      MARIADB_DATABASE: proof_of_tooling
+      MARIADB_USER: pot
+      MARIADB_PASSWORD: pot_dev_password
+      MARIADB_ROOT_PASSWORD: pot_dev_root_password
+    volumes:
+      - pot_db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+volumes:
+  pot_db_data:

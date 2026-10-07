@@ -70,8 +70,21 @@ describe("processClaim", () => {
     const meta = { isPrivate: false, archived: true, isFork: false, commitCount: 40, ownCommits: 40, createdAt: "2026-01-01T00:00:00Z" };
     const rejected = await processClaim(req, deps({ getRepoMetadata: async () => meta }), true);
     expect(rejected.checks.at(-1)?.detail).toContain("archived");
-    const review = await processClaim(req, deps({ getRepoMetadata: async () => ({ ...meta, archived: false, commitCount: 2 }) }), true);
+    const lowActivity = deps({ getRepoMetadata: async () => ({ ...meta, archived: false, commitCount: 2 }) });
+    const review = await processClaim(req, lowActivity, true);
+    expect(review).toMatchObject({ ok: true, inReview: true });
+    expect(review.checks.at(-1)).toMatchObject({ id: "repo", ok: true });
     expect(review.checks.at(-1)?.detail).toContain("manual review");
+    expect(lowActivity.saveClaim).toHaveBeenCalledWith(expect.objectContaining({ pending: true }));
+    const dry = await processClaim(req, deps({ getRepoMetadata: async () => ({ ...meta, archived: false, commitCount: 2 }) }), false);
+    expect(dry).toMatchObject({ ok: true, inReview: true });
+  });
+
+  it("is idempotent for a claim already waiting for review", async () => {
+    const pending = { id: 2, status: "pending" } as Claim;
+    const d = deps({ getHistory: async () => ({ existing: pending, identityClaimsLast24h: 0, otherClaimants: 0 }) });
+    expect(await processClaim(req, d, true)).toMatchObject({ ok: true, inReview: true, claim: pending });
+    expect(d.saveClaim).not.toHaveBeenCalled();
   });
 
   describe("unclaim with the real CLI fixture", () => {

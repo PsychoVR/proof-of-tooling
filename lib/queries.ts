@@ -22,7 +22,9 @@ import type {
   ValidatorProfile,
 } from "@/lib/types";
 
+// Registry and leaderboard only list claims that count; profile and tool pages also show pending ones.
 const PUBLIC_CLAIM_STATUSES = ["active", "stale"] as const;
+const DISPLAY_CLAIM_STATUSES = ["active", "stale", "pending"] as const;
 
 async function withClaims(toolRows: ToolRow[]): Promise<ToolWithClaims[]> {
   if (toolRows.length === 0) return [];
@@ -30,7 +32,7 @@ async function withClaims(toolRows: ToolRow[]): Promise<ToolWithClaims[]> {
   const claimRows: ClaimRow[] = await db
     .select()
     .from(claims)
-    .where(and(inArray(claims.toolId, toolRows.map((t) => t.id)), inArray(claims.status, [...PUBLIC_CLAIM_STATUSES])));
+    .where(and(inArray(claims.toolId, toolRows.map((t) => t.id)), inArray(claims.status, [...DISPLAY_CLAIM_STATUSES])));
   const seeds = await db
     .select({ toolId: seedEntries.toolId, validatorName: seedEntries.validatorName })
     .from(seedEntries)
@@ -105,7 +107,7 @@ export async function getValidatorProfile(identity: string): Promise<ValidatorPr
     db
       .select({ toolId: claims.toolId })
       .from(claims)
-      .where(and(eq(claims.identity, identity), inArray(claims.status, [...PUBLIC_CLAIM_STATUSES]))),
+      .where(and(eq(claims.identity, identity), inArray(claims.status, [...DISPLAY_CLAIM_STATUSES]))),
     best.name
       ? db
           .select({ toolId: seedEntries.toolId })

@@ -154,7 +154,11 @@ export function ClaimWizard() {
             {outcome && (
               <div className={`result ${outcome.result.ok ? "ok" : "bad"}`}>
                 <strong className={outcome.result.ok ? "ok" : "bad"}>
-                  {outcome.result.ok ? "All checks passed." : "Some checks failed."}
+                  {outcome.result.ok
+                    ? outcome.result.inReview
+                      ? "Checks passed. This claim needs a manual review before it counts."
+                      : "All checks passed."
+                    : "Some checks failed."}
                 </strong>
                 <ul className="checks">
                   {outcome.result.checks.map((c) => (
@@ -171,7 +175,11 @@ export function ClaimWizard() {
                     </button>
                   </div>
                 )}
-                {registered && registered.ok && <strong className="ok">Claim registered.</strong>}
+                {registered && registered.ok && (
+                  <strong className="ok">
+                    {registered.inReview ? "Claim submitted. It is in review and will count once approved." : "Claim registered."}
+                  </strong>
+                )}
                 {registered === null && <strong className="bad">Could not reach the service. Try again.</strong>}
                 {registered && !registered.ok && <strong className="bad">The claim was not recorded.</strong>}
                 {outcome.simulated && (

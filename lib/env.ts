@@ -3,6 +3,8 @@ import { z } from "zod";
 const schema = z.object({
   DATABASE_URL: z.string().min(1),
   CRON_SECRET: z.string().min(16),
+  // Separate from CRON_SECRET: protects the admin moderation endpoints. Unset disables them.
+  ADMIN_SECRET: z.string().min(16).optional(),
   HELIUS_RPC_URL: z.string().url().optional(),
   RPC_TESTNET_URL: z.string().url().optional(),
   RPC_ALPENGLOW_URL: z.string().url().optional(),

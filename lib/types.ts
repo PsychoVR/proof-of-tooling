@@ -14,7 +14,8 @@ export const CATEGORIES = [
 ] as const;
 export type Category = (typeof CATEGORIES)[number];
 
-export const CLAIM_STATUSES = ["active", "stale", "withdrawn", "rejected"] as const;
+/** `pending` = sent to manual review by the anti-abuse rules; it never counts in totals. */
+export const CLAIM_STATUSES = ["active", "pending", "stale", "withdrawn", "rejected"] as const;
 export type ClaimStatus = (typeof CLAIM_STATUSES)[number];
 
 export type ToolKind = "repo" | "web";
@@ -172,12 +173,15 @@ export interface ClaimCheckResult {
 /** POST /api/v1/claims/check */
 export interface ClaimCheckResponse {
   ok: boolean;
+  /** True when every check passed but the rules require manual review before it counts. */
+  inReview?: boolean;
   checks: ClaimCheckResult[];
 }
 
 /** POST /api/v1/claims */
 export interface ClaimResponse {
   ok: boolean;
+  inReview?: boolean;
   claim?: Claim;
   checks: ClaimCheckResult[];
 }

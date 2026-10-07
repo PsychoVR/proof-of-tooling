@@ -5,7 +5,7 @@ import { StatusPill } from "@/components/StatusPill";
 import { toolDisplayUrl } from "@/lib/claims/message";
 import { getToolBySlug } from "@/lib/queries";
 import type { ToolWithClaims } from "@/lib/types";
-import { formatDate, safeHttpUrl, shortKey } from "@/lib/ui/format";
+import { formatDate, safeHttpUrl, shortKey, toolPillStatus } from "@/lib/ui/format";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +36,7 @@ export default async function ToolPage({ params }: Props) {
       <h1 className="page-title" style={{ marginTop: 12 }}>{tool.name}</h1>
       <p style={{ margin: "8px 0 0" }}>
         <span className="tool"><span className="cat">{tool.category}</span></span>{" "}
-        <StatusPill status={tool.status} />
+        <StatusPill status={toolPillStatus(tool)} />
       </p>
 
       <div className="grid2" style={{ marginTop: 24 }}>
@@ -76,7 +76,7 @@ export default async function ToolPage({ params }: Props) {
                   ) : (
                     <span>{u.name}</span>
                   )}
-                  <StatusPill status={tool.status} />
+                  <StatusPill status={toolPillStatus(tool, u.identity ?? undefined)} />
                 </li>
               ))}
             </ul>

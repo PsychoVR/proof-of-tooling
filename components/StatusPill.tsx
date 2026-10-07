@@ -4,6 +4,7 @@ const LABELS: Record<ToolStatus | ClaimStatus | ToolHealth, string> = {
   claimed: "✓ Signed",
   unclaimed: "Unclaimed",
   active: "Active",
+  pending: "In review",
   stale: "Stale",
   withdrawn: "Withdrawn",
   rejected: "Rejected",

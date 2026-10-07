@@ -15,7 +15,16 @@ export const metadata: Metadata = {
 };
 
 // Self-hosted at build time: no request to Google at runtime, so the CSP needs no external font origins.
-const display = Big_Shoulders({ subsets: ["latin"], weight: ["600", "800"], variable: "--ff-display", display: "swap" });
+// Next has no metrics for Big Shoulders, so it cannot derive a size-matched fallback (that warned at every build).
+// Impact and Arial Narrow are condensed faces of similar width, which keeps the swap from shifting the layout.
+const display = Big_Shoulders({
+  subsets: ["latin"],
+  weight: ["600", "800"],
+  variable: "--ff-display",
+  display: "swap",
+  adjustFontFallback: false,
+  fallback: ["Impact", "Arial Narrow", "sans-serif"],
+});
 const body = Hanken_Grotesk({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--ff-body", display: "swap" });
 const mono = JetBrains_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--ff-mono", display: "swap" });
 

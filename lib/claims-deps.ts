@@ -5,6 +5,7 @@ import { claims, tools, validators } from "@/db/schema";
 import { ENABLED_CLUSTERS } from "@/lib/clusters";
 import { getEnv } from "@/lib/env";
 import { e2eOverrides } from "@/lib/claims-stub";
+import { resolveTxt } from "@/lib/dns-txt";
 import { safeFetcher } from "@/lib/safe-fetch";
 import type { Fetcher, RepoMetadata } from "@/lib/claims";
 import { MAX_PENDING_PER_IDENTITY, mergeClaim, proofFileUrl, registrableDomain } from "@/lib/claims";
@@ -94,6 +95,7 @@ export function createClaimsDeps(): ClaimsDeps {
   return {
     now: () => new Date(),
     fetcher: safeFetcher,
+    resolveTxt,
     getRepoMetadata,
 
     async findValidatorCluster(identity) {

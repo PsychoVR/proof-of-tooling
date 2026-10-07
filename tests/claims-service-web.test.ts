@@ -24,6 +24,7 @@ function setup(history: Partial<History> = {}) {
       fetched.push(url);
       return { status: 200, body: JSON.stringify({ identities: [ID] }) };
     },
+    resolveTxt: async () => [],
     findValidatorCluster: async () => "mainnet",
     getRepoMetadata,
     getHistory: async () => ({ existing: null, identityClaimsLast24h: 0, otherClaimants: 0, sameDomainClaims: 0, ...history }),

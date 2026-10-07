@@ -7,6 +7,7 @@ import {
   proofFileUrl,
   verifyClaimSignature,
   type Fetcher,
+  type TxtResolver,
   type RepoMetadata,
 } from "@/lib/claims";
 import type { Category, Claim, ClaimCheckResult, ClaimRequest, ClaimResponse, Cluster } from "@/lib/types";
@@ -35,6 +36,8 @@ const pendingLimitDetail = `This identity already has ${MAX_PENDING_PER_IDENTITY
 export interface ClaimsDeps {
   now: () => Date;
   fetcher: Fetcher;
+  /** DNS TXT lookup for the web proof method. */
+  resolveTxt: TxtResolver;
   /** Cluster of the vote account whose node identity matches, or null when unknown. */
   findValidatorCluster: (identity: string) => Promise<Cluster | null>;
   getRepoMetadata: (toolUrl: string) => Promise<RepoMetadata | null>;
@@ -114,7 +117,7 @@ export async function processClaim(
 
   // Withdrawing needs the signature only; the proof file may already be gone.
   if (parsed.action === "claim") {
-    const proof = await checkProofFile(parsed.toolUrl, parsed.identity, deps.fetcher);
+    const proof = await checkProofFile(parsed.toolUrl, parsed.identity, deps.fetcher, deps.resolveTxt);
     checks.push(proof);
     if (!proof.ok) return { ok: false, checks };
 

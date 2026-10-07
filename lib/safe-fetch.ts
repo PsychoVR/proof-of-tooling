@@ -60,7 +60,11 @@ export function isPrivateIp(ip: string): boolean {
       (first & 0xff00) === 0xff00 || // ff00::/8 multicast
       first === 0x2002 || // 2002::/16 6to4
       (first === 0x64 && g[1] === 0xff9b) || // 64:ff9b::/96 NAT64 (and the 64:ff9b:1::/48 local-use range)
-      (first === 0x2001 && g[1] === 0x0db8) // 2001:db8::/32 documentation
+      (first === 0x2001 && g[1] === 0x0db8) || // 2001:db8::/32 documentation
+      (first === 0x2001 && g[1] === 0) || // 2001::/32 Teredo
+      (first === 0x100 && g[1] === 0 && g[2] === 0 && g[3] === 0) || // 100::/64 discard-only
+      (first === 0x3fff && (g[1] & 0xf000) === 0) || // 3fff::/20 documentation
+      (g.slice(0, 4).every((x) => x === 0) && g[4] === 0xffff && g[5] === 0) // ::ffff:0:0/96 IPv4-translated
     );
   }
   return net.isIPv4(ip) ? isPrivateV4(ip) : true;

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { verifyClaimSignature } from "../lib/claims";
 import fixture from "../tests/fixtures/cli-signatures.json";
 import { gotoHydrated, watchConsole } from "./helpers";
 
@@ -60,6 +61,11 @@ test("wizard: valid CLI signature verifies and registers end to end", async ({ p
   const entry = reg.entries.find((e: { message: string }) => e.message === valid.message);
   expect(entry).toMatchObject({ identity: fixture.identity, cluster: "testnet", signature: valid.signature, status: "active" });
   expect(entry.tool.category).toBe("Meta");
+  // Anyone can re-verify the published registry without trusting the server.
+  for (const e of reg.entries as { message: string; signature: string; identity: string }[]) {
+    const r = verifyClaimSignature({ message: e.message, signature: e.signature, identity: e.identity, now: new Date("2026-10-07T12:00:00Z") });
+    if (e.message === valid.message) expect(r.ok).toBe(true);
+  }
   c.expectClean();
 });
 

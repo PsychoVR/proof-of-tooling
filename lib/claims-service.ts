@@ -19,6 +19,10 @@ export interface ClaimHistory {
   sameDomainClaims?: number;
   /** Claims of this identity currently waiting for manual review. */
   pendingClaims?: number;
+  /** Active claims of this identity on other tools. */
+  identityActiveClaims?: number;
+  /** Claims of any identity (active or pending) on other web tools under the same registrable domain. */
+  domainClaimsAllIdentities?: number;
 }
 
 /** Thrown by the storage layer when saving would exceed the pending limit (checked under a lock). */
@@ -26,6 +30,30 @@ export class PendingLimitError extends Error {
   constructor() {
     super("pending claim limit reached");
     this.name = "PendingLimitError";
+  }
+}
+
+/** The identity is not (or no longer) in the validators table; nothing is stored. */
+export class UnknownValidatorError extends Error {
+  constructor() {
+    super("identity is not a known validator");
+    this.name = "UnknownValidatorError";
+  }
+}
+
+/** The rules, re-evaluated under the identity lock, refuse the claim. */
+export class RuleRejectedError extends Error {
+  constructor(public readonly reasons: string[]) {
+    super(`claim rejected by the rules: ${reasons.join(" ")}`);
+    this.name = "RuleRejectedError";
+  }
+}
+
+/** The identity already created the maximum number of tools through claims. */
+export class ToolQuotaError extends Error {
+  constructor() {
+    super("tool creation quota reached");
+    this.name = "ToolQuotaError";
   }
 }
 
@@ -52,6 +80,12 @@ export interface ClaimsDeps {
     /** Category and name chosen in the claim form; used only when the tool is new. */
     category?: Category;
     toolName?: string;
+    /**
+     * Inputs to re-evaluate the rules inside the storage transaction, where the counters are exact.
+     * `repo` is required for repository URLs. When present, the stored status can only be stricter
+     * than `pending` says.
+     */
+    recheck?: { now: Date; repo?: RepoMetadata };
   }) => Promise<Claim>;
 }
 
@@ -111,6 +145,7 @@ export async function processClaim(
     return { ok: true, inReview: true, claim: existing, checks };
   }
   let inReview = false;
+  let repo: RepoMetadata | undefined;
 
   // Withdrawing needs the signature only; the proof file may already be gone.
   if (parsed.action === "claim") {
@@ -123,6 +158,7 @@ export async function processClaim(
       identityClaimsLast24h: history.identityClaimsLast24h,
       alreadyClaimedBySameIdentity: false,
       otherClaimants: history.otherClaimants,
+      identityActiveClaims: history.identityActiveClaims ?? 0,
     };
     const isRepo = proofFileUrl(parsed.toolUrl)?.kind === "repo";
     const checkId = isRepo ? "repo" : "rules";
@@ -133,9 +169,14 @@ export async function processClaim(
         checks.push({ id: "repo", ok: false, detail: "Repository metadata unavailable." });
         return { ok: false, checks };
       }
+      repo = meta;
       outcome = evaluateRepoRules(meta, ctx);
     } else {
-      outcome = evaluateWebRules({ ...ctx, sameDomainClaims: history.sameDomainClaims ?? 0 });
+      outcome = evaluateWebRules({
+        ...ctx,
+        sameDomainClaims: history.sameDomainClaims ?? 0,
+        domainClaimsAllIdentities: history.domainClaimsAllIdentities ?? 0,
+      });
     }
     if (outcome.decision === "reject") {
       checks.push({ id: checkId, ok: false, detail: outcome.reasons.join(" ") });
@@ -166,11 +207,17 @@ export async function processClaim(
       pending: inReview,
       category: req.category,
       toolName: req.toolName,
+      recheck: parsed.action === "claim" ? { now: deps.now(), repo } : undefined,
     });
   } catch (err) {
-    if (!(err instanceof PendingLimitError)) throw err;
-    checks.push({ id: "rules", ok: false, detail: pendingLimitDetail });
+    if (err instanceof PendingLimitError) checks.push({ id: "rules", ok: false, detail: pendingLimitDetail });
+    else if (err instanceof UnknownValidatorError) checks.push({ id: "validator", ok: false, detail: "Identity is not a known validator node." });
+    else if (err instanceof ToolQuotaError) checks.push({ id: "rules", ok: false, detail: "This identity already registered the maximum number of new tools." });
+    else if (err instanceof RuleRejectedError) checks.push({ id: proofFileUrl(parsed.toolUrl)?.kind === "repo" ? "repo" : "rules", ok: false, detail: err.reasons.join(" ") });
+    else throw err;
     return { ok: false, checks };
   }
+  // The rules ran again under the lock and may have sent the claim to review.
+  inReview ||= claim.status === "pending";
   return { ok: true, inReview, claim, checks };
 }

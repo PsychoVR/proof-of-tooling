@@ -8,11 +8,25 @@ Live at [tooling.sunshinevr.io](https://tooling.sunshinevr.io). Built by [Sunshi
 
 ## How claiming works
 
-1. Add `.proof-of-tooling.json` to the root of your repo (or `/.well-known/proof-of-tooling.json` on your site):
+1. Prove you own the tool. The proof lists your validator identity pubkey and is checked on every claim and again periodically, so keep it in place.
+
+   **GitHub repos.** Add `.proof-of-tooling.json` to the root of the repo's default branch:
 
    ```json
    { "identities": ["<your validator identity pubkey>"] }
    ```
+
+   To cover all your repos at once, put the same file in `github.com/<owner>/.github` or in your profile repo `github.com/<owner>/<owner>`. Only the owner named in the claimed URL is consulted. The repo's own file is checked first.
+
+   **Websites.** Any one of these is enough. Each is valid only for the exact host you claim (`tool.example.com` does not cover `example.com` or `other.example.com`), and bare shared suffixes such as `vercel.app` or `github.io` are not supported, while `you.vercel.app` is.
+
+   - A file at `https://<host>/.well-known/proof-of-tooling.json` with the same JSON as above.
+   - A DNS TXT record on `<host>` with the value `proof-of-tooling=<your validator identity pubkey>`.
+   - A tag inside the `<head>` of `https://<host>/`:
+
+     ```html
+     <meta name="proof-of-tooling" content="<your validator identity pubkey>">
+     ```
 
 2. Sign the claim line with your identity key:
 

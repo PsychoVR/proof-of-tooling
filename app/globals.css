@@ -232,4 +232,11 @@ footer.site b { color: var(--fg); }
 }
 .proof-block { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
 .proof-block h3 { font-size: 15px; }
+.proof-tabs { display: flex; flex-direction: column; gap: 10px; }
+.tablist { display: flex; gap: 4px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tab { font: inherit; font-weight: 600; font-size: 14px; padding: 8px 14px; border: 1px solid transparent; border-bottom: 0; border-radius: 7px 7px 0 0; background: transparent; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.tab[aria-selected="true"] { background: var(--surface); border-color: var(--line); color: var(--fg); margin-bottom: -1px; }
+.tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.tabpanel { display: flex; flex-direction: column; gap: 10px; }
+.tabpanel[hidden] { display: none; }
 .proof-block code { font-family: var(--f-mono); font-size: 12.5px; }

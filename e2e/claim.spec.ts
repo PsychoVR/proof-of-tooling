@@ -39,6 +39,7 @@ test("wizard: valid CLI signature verifies and registers end to end", async ({ p
   const link = page.getByRole("link", { name: "Create proof file on GitHub" });
   await expect(link).toHaveAttribute("href", /^https:\/\/github\.com\/psychovr\/proof-of-tooling\/new\/[^?]+\?filename=\.proof-of-tooling\.json&value=/);
   await expect(page.getByText(`"identities"`).first()).toBeVisible();
+  await expect(page.getByText("covers all your repos")).toBeVisible();
   await page.getByRole("button", { name: "I have the signature" }).click();
 
   // A signature for a different message fails the check.
@@ -73,6 +74,22 @@ test("wizard: valid CLI signature verifies and registers end to end", async ({ p
     if (e.message === valid.message) expect(r.ok).toBe(true);
   }
   c.expectClean();
+});
+
+test("wizard: sites get three accessible proof methods", async ({ page }) => {
+  await gotoHydrated(page, "/claim");
+  await page.locator("#c-name").fill("Pool dashboard");
+  await page.locator("#c-url").fill("pool.example.com/watch");
+  await page.locator("#c-id").fill(fixture.identity);
+  await page.getByRole("button", { name: "Generate claim" }).click();
+  const tabs = page.getByRole("tab");
+  await expect(tabs).toHaveCount(3);
+  await tabs.first().focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(page.getByRole("tab", { name: "DNS TXT" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tabpanel")).toContainText(`proof-of-tooling=${fixture.identity}`);
+  await page.keyboard.press("ArrowRight");
+  await expect(page.getByRole("tabpanel")).toContainText('<meta name="proof-of-tooling"');
 });
 
 test("registering the same claim twice is idempotent", async ({ request }) => {

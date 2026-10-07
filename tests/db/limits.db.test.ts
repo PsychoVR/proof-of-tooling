@@ -81,3 +81,38 @@ describe("findValidatorCluster ignores stale validators (B5)", () => {
     expect(await d.findValidatorCluster(V.quiet.identity)).toBe("mainnet");
   });
 });
+
+describe("pruneOrphanTools and the failure counter (V4, B6)", () => {
+  it("removes only old tools with no seed entry, claim or endorsement", async () => {
+    const { pruneOrphanTools } = await import("@/jobs/prune");
+    const mk = (slug: string) => getDb().insert(tools).values({ slug, url: `${slug}.example.com`, name: slug, category: "Library", kind: "web" });
+    for (const s of ["orphan-old", "orphan-new", "claimed-old"]) await mk(s);
+    await getDb().execute(sql`UPDATE tools SET created_at = NOW() - INTERVAL 3 DAY WHERE slug IN ('orphan-old', 'claimed-old')`);
+    await save("claimed-old.example.com", V.quiet.identity);
+    expect(await pruneOrphanTools(new Date())).toBe(1);
+    const left = (await getDb().select({ slug: tools.slug }).from(tools).where(sql`url LIKE '%.example.com'`)).map((r) => r.slug).sort();
+    expect(left).toEqual(["claimed-old", "orphan-new"]);
+    expect(await getDb().select().from(tools).where(eq(tools.slug, "watchtower"))).toHaveLength(1);
+  });
+
+  it("runReverify with the real writers: counts failures, resets on success, stale on the second, ignores network errors", async () => {
+    const { runReverify, ProofUnreachableError } = await import("@/jobs/reverify");
+    await save("rv.example.com", V.quiet.identity);
+    const row = async () => (await getDb().select().from(claims).where(eq(claims.identity, V.quiet.identity)))[0];
+    const fail = async () => ({ id: "proof" as const, ok: false });
+    const pass = async () => ({ id: "proof" as const, ok: true });
+    const down = async () => {
+      throw new ProofUnreachableError("down");
+    };
+
+    await runReverify({ check: fail, prune: async () => 0 });
+    expect(await row()).toMatchObject({ status: "active", failures: 1 });
+    await runReverify({ check: down, prune: async () => 0 });
+    expect(await row()).toMatchObject({ status: "active", failures: 1 });
+    await runReverify({ check: pass, prune: async () => 0 });
+    expect(await row()).toMatchObject({ status: "active", failures: 0 });
+    await runReverify({ check: fail, prune: async () => 0 });
+    await runReverify({ check: fail, prune: async () => 0 });
+    expect(await row()).toMatchObject({ status: "stale", failures: 2 });
+  });
+});

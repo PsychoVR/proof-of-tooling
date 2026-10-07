@@ -18,7 +18,7 @@ export function createRateLimiter(
     for (const [k, v] of hits) if (v[v.length - 1] <= t - windowMs) hits.delete(k);
   }
 
-  return function allow(key: string): boolean {
+  function allow(key: string): boolean {
     const t = now();
     if (t - lastPrune >= windowMs) prune(t);
     const recent = (hits.get(key) ?? []).filter((x) => t - x < windowMs);
@@ -28,5 +28,12 @@ export function createRateLimiter(
     if (recent.length > 0) hits.set(key, recent);
     while (hits.size > maxKeys) hits.delete(hits.keys().next().value as string);
     return allowed;
+  }
+
+  /** True when the key has used up its allowance, without counting a hit. */
+  allow.exhausted = (key: string): boolean => {
+    const t = now();
+    return (hits.get(key) ?? []).filter((x) => t - x < windowMs).length >= limit;
   };
+  return allow;
 }

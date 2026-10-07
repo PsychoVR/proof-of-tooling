@@ -47,8 +47,12 @@ test("lists pending claims with an etag and requires it to decide", async ({ req
   expect((await (await request.get("/api/admin/claims", { headers: auth })).json()).items).toEqual([]);
 });
 
-test("seed endpoint is idempotent: nothing new on a database that is already seeded", async ({ request }) => {
-  const res = await request.post("/api/admin/seed", { headers: auth });
-  expect(res.status()).toBe(200);
-  expect(await res.json()).toEqual({ ok: true, tools: 7, newTools: 0, newEntries: 0 });
+test("seed endpoint loads the full list once and is idempotent afterwards", async ({ request }) => {
+  const first = await request.post("/api/admin/seed", { headers: auth });
+  expect(first.status()).toBe(200);
+  const body = await first.json();
+  expect(body).toMatchObject({ ok: true, tools: 27, updatedEntries: 0, skippedClaimed: expect.any(Number) });
+  expect(body.newTools).toBe(body.newEntries);
+  const again = await request.post("/api/admin/seed", { headers: auth });
+  expect(await again.json()).toEqual({ ok: true, tools: 27, newTools: 0, newEntries: 0, updatedEntries: 0, skippedClaimed: body.skippedClaimed });
 });

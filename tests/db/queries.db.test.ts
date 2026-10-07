@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { getDb } from "@/db";
 import { CLI_IDENTITY, DEV_VALIDATORS as V, resetDevDb, seedDevData } from "@/db/dev-data";
-import { claimDecisions, claims, tools, validators as validatorsTable } from "@/db/schema";
+import { claimDecisions, claims, seedEntries, tools, validators as validatorsTable } from "@/db/schema";
 import { adminDbDeps, decideClaim, listPendingClaims } from "@/lib/admin-claims";
 import { createClaimsDeps } from "@/lib/claims-deps";
 import { processClaim } from "@/lib/claims-service";
@@ -128,10 +128,10 @@ describe("getTools / getToolBySlug", () => {
   it("lists unclaimed tools with the seed name as plain owner text, hiding pending-only ones", async () => {
     const un = await getTools({ status: "unclaimed" });
     expect(un.map((t) => [t.name, t.owner]).sort()).toEqual([
-      ["Alpenglow Explorer", { name: "Valid Blocks", identity: null }],
-      ["Solana Dashboards", { name: "Valid Blocks", identity: null }],
+      ["Alpenglow Explorer", { name: "Valid Blocks", identity: null, sourceUrl: expect.stringMatching(/^https:\/\//) }],
+      ["Solana Dashboards", { name: "Valid Blocks", identity: null, sourceUrl: expect.stringMatching(/^https:\/\//) }],
       ["Stakewiz", expect.objectContaining({ identity: V.laine.identity })], // stale claim names its signer
-      ["validators.app", { name: "Block Logic", identity: null }],
+      ["validators.app", { name: "Block Logic", identity: null, sourceUrl: expect.stringMatching(/^https:\/\//) }],
     ].sort());
     expect((await getTools({})).map((t) => t.name)).not.toContain("New Tool");
     expect((await getTools({ category: "Explorer" })).map((t) => t.name).sort()).toEqual(["Alpenglow Explorer", "Stakewiz", "validators.app"]);
@@ -152,12 +152,38 @@ describe("getRegistry", () => {
 });
 
 describe("seedUnclaimed against MariaDB", () => {
-  it("is idempotent and leaves existing tools untouched", async () => {
+  it("is idempotent, adds the full list and skips tools that have claims", async () => {
     const { seedUnclaimed } = await import("@/lib/seed");
-    expect(await seedUnclaimed()).toEqual({ tools: 7, newTools: 0, newEntries: 0 });
+    const { SEED_TOOLS } = await import("@/db/seed-data");
+    const n = SEED_TOOLS.length;
+    // The dev data holds 7 of the entries; 4 of them (mithril, watchtower, rugalert, stakewiz) have claims.
+    expect(await seedUnclaimed()).toEqual({ tools: n, newTools: n - 7, newEntries: n - 7, updatedEntries: 0, skippedClaimed: 4 });
+    expect(await seedUnclaimed()).toEqual({ tools: n, newTools: 0, newEntries: 0, updatedEntries: 0, skippedClaimed: 4 });
     await resetDevDb();
-    expect(await seedUnclaimed()).toEqual({ tools: 7, newTools: 7, newEntries: 7 });
-    expect(await seedUnclaimed()).toEqual({ tools: 7, newTools: 0, newEntries: 0 });
+    expect(await seedUnclaimed()).toEqual({ tools: n, newTools: n, newEntries: n, updatedEntries: 0, skippedClaimed: 0 });
+    expect(await seedUnclaimed()).toEqual({ tools: n, newTools: 0, newEntries: 0, updatedEntries: 0, skippedClaimed: 0 });
+    await resetDevDb();
+    await seedDevData();
+  });
+
+  it("updates the seed entry of an unclaimed tool but never that of a claimed one", async () => {
+    const { seedUnclaimed } = await import("@/lib/seed");
+    const db = getDb();
+    const entryOf = async (slug: string) => {
+      const [row] = await db
+        .select({ name: seedEntries.validatorName, source: seedEntries.sourceUrl })
+        .from(seedEntries)
+        .innerJoin(tools, eq(tools.id, seedEntries.toolId))
+        .where(eq(tools.slug, slug));
+      return row;
+    };
+    const fresh = await entryOf("alpenglow-explorer");
+    const claimedBefore = await entryOf("stakewiz");
+    await db.update(seedEntries).set({ validatorName: "Old Name", sourceUrl: "https://old.example/page" }).where(sql`1=1`);
+    expect(await seedUnclaimed()).toMatchObject({ updatedEntries: 3, skippedClaimed: 4 });
+    expect(await entryOf("alpenglow-explorer")).toEqual(fresh); // unclaimed: refreshed from the list
+    expect(await entryOf("stakewiz")).toEqual({ name: "Old Name", source: "https://old.example/page" }); // claimed: untouched
+    expect(claimedBefore.name).not.toBe("Old Name");
     await resetDevDb();
     await seedDevData();
   });

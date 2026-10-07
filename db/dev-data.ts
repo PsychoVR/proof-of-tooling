@@ -2,7 +2,12 @@
 import { eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { claims, endorsements, seedEntries, tools, validators } from "@/db/schema";
-import { SEED_ADDED_BY, SEED_TOOLS } from "./seed-data";
+import { SEED_ADDED_BY, SEED_TOOLS as ALL_SEED_TOOLS } from "./seed-data";
+
+// Local and e2e data use a fixed subset of the real seed list, so adding entries to the list never
+// shifts the counts the tests assert on.
+const DEV_SEED_SLUGS = ["watchtower", "rugalert", "alpenglow-explorer", "solana-dashboards", "mithril", "stakewiz", "validators-app"];
+const SEED_TOOLS = ALL_SEED_TOOLS.filter((s) => DEV_SEED_SLUGS.includes(s.slug));
 
 type Db = ReturnType<typeof getDb>;
 

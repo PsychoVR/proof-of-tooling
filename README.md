@@ -72,6 +72,8 @@ Rate limits are keyed by client IP. The first `X-Forwarded-For` value is client-
 - `TRUSTED_IP_HEADER=x-real-ip` (or whichever header your proxy sets with the real client address). Used when it holds a valid IP.
 - `TRUSTED_PROXY_HOPS=<n>` (default `1`): number of trusted proxies in front of the app. The client IP is the `X-Forwarded-For` entry that many positions from the right.
 
+Per-IP limits only block once one of these two variables is set. Until then they run in log-only mode: requests are counted and a would-be block is logged, but never refused, so a first deploy cannot lock anyone out. To pick the header, call `GET /api/admin/debug/ip` with `Authorization: Bearer $ADMIN_SECRET`: it echoes `x-forwarded-for`, `x-real-ip`, `forwarded`, `cf-connecting-ip` and `x-client-ip` as the proxy delivered them (nothing is stored). Per-identity limits are not affected.
+
 If the IP cannot be determined, the request falls into a single shared bucket with a stricter limit. Claim requests are additionally limited per claimed identity.
 
 ## License

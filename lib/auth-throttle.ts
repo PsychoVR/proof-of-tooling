@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getClientIp } from "@/lib/client-ip";
+import { enforceIpLimits, logWouldBlock } from "@/lib/ip-limit-mode";
 import { createRateLimiter } from "@/lib/rate-limit";
 
 const MAX_FAILURES = 10;
@@ -27,7 +28,10 @@ export function authGate(req: Request, authorized: (header: string | null) => bo
   // The secret is checked first: a correct one always passes, so a shared IP bucket (or an
   // attacker exhausting it) cannot lock the operator out. Only failures are counted.
   if (authorized(req.headers.get("authorization"))) return null;
-  if (failures.exhausted(key)) return NextResponse.json({ error: "too many attempts" }, { status: 429 });
+  if (failures.exhausted(key)) {
+    if (enforceIpLimits()) return NextResponse.json({ error: "too many attempts" }, { status: 429 });
+    logWouldBlock("admin/cron auth");
+  }
   failures(key);
   return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 }

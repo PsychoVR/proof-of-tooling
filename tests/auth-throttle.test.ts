@@ -6,7 +6,10 @@ const req = (ip: string, auth = "Bearer wrong") =>
   new Request("http://x/api/admin/seed", { method: "POST", headers: { "x-forwarded-for": ip, authorization: auth } });
 const check = (h: string | null) => h === "Bearer right";
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
+});
 
 describe("authGate", () => {
   it("passes a correct secret", () => {
@@ -14,6 +17,7 @@ describe("authGate", () => {
   });
 
   it("answers 401 for failures, then 429 for wrong secrets after 10 in a minute; a correct secret still passes (L2)", async () => {
+    vi.stubEnv("TRUSTED_PROXY_HOPS", "1");
     for (let i = 0; i < 10; i++) expect((authGate(req("30.0.0.2"), check))!.status).toBe(401);
     expect(authGate(req("30.0.0.2"), check)!.status).toBe(429);
     expect(authGate(req("30.0.0.2", "Bearer right"), check)).toBeNull();

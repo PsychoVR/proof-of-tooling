@@ -26,10 +26,15 @@ describe("handleClaimRequest rate limits (M4)", () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-07T12:00:00Z"));
+    vi.stubEnv("TRUSTED_PROXY_HOPS", "1"); // per-IP limits only block once the proxy is configured
     processClaim.mockReset();
     processClaim.mockResolvedValue({ ok: true, checks: [] });
   });
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+  });
+
 
   it("unsigned messages do not spend an identity bucket (M1); a signed flood is limited even when the IP rotates", async () => {
     const other = valid.message.replace("github.com/psychovr/proof-of-tooling", "example.com");
@@ -59,5 +64,13 @@ describe("handleClaimRequest rate limits (M4)", () => {
     const statuses: number[] = [];
     for (let i = 0; i < 7; i++) statuses.push((await send("not a claim", null, false)).status);
     expect(statuses.filter((s) => s === 429)).toHaveLength(2);
+  });
+  it("log-only: without a configured proxy the IP limit counts and logs but never answers 429", async () => {
+    vi.stubEnv("TRUSTED_PROXY_HOPS", "");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    for (let i = 0; i < 30; i++) expect((await send("not a claim", "26.0.0.1", false)).status).not.toBe(429);
+    for (let i = 0; i < 8; i++) expect((await send("not a claim", null, false)).status).not.toBe(429);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
   });
 });

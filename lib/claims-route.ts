@@ -6,6 +6,7 @@ import { processClaim } from "@/lib/claims-service";
 import { createRateLimiter } from "@/lib/rate-limit";
 import { sanitizeText } from "@/lib/text";
 import { getClientIp } from "@/lib/client-ip";
+import { enforceIpLimits, logWouldBlock } from "@/lib/ip-limit-mode";
 import { parseClaimMessage, verifyClaimSignature } from "@/lib/claims";
 
 const bodySchema = z.object({
@@ -45,7 +46,10 @@ async function readBodyCapped(req: Request, max: number): Promise<string | null>
 
 export async function handleClaimRequest(req: Request, persist: boolean) {
   const ip = getClientIp(req.headers);
-  if (!(ip ? allow(`${persist ? "w" : "c"}:${ip}`) : allowUnknown(persist ? "w" : "c"))) return tooMany();
+  if (!(ip ? allow(`${persist ? "w" : "c"}:${ip}`) : allowUnknown(persist ? "w" : "c"))) {
+    if (enforceIpLimits()) return tooMany();
+    logWouldBlock(`claims ${persist ? "register" : "check"}`);
+  }
   if (Number(req.headers.get("content-length") ?? 0) > MAX_BODY_BYTES) {
     return NextResponse.json({ error: "payload too large" }, { status: 413 });
   }

@@ -255,3 +255,44 @@ test("ledger keeps the table layout above 640px", async ({ page }) => {
   expect(display).toBe("table-row");
   await expect(page.getByRole("columnheader", { name: "Validator" })).toBeVisible();
 });
+
+test.describe("social metadata and icons", () => {
+  const meta = (page: import("@playwright/test").Page, selector: string) => page.locator(selector).first().getAttribute("content");
+
+  for (const [path, title] of [
+    ["/", "Proof of Tooling"],
+    ["/claim", "Claim a tool | Proof of Tooling"],
+    ["/registry", "Registry | Proof of Tooling"],
+    ["/t/watchtower", "Watchtower | Proof of Tooling"],
+  ] as const) {
+    test(`${path} has Open Graph and Twitter card tags`, async ({ page }) => {
+      await page.goto(path);
+      expect(await meta(page, 'meta[property="og:title"]')).toBe(title);
+      expect(await meta(page, 'meta[property="og:description"]')).toBeTruthy();
+      expect(await meta(page, 'meta[property="og:image"]')).toMatch(/\/og$/);
+      expect(await meta(page, 'meta[name="twitter:card"]')).toBe("summary_large_image");
+      expect(await meta(page, 'meta[name="twitter:site"]')).toBe("@proofoftooling");
+      expect(await meta(page, 'meta[name="description"]')).toBeTruthy();
+    });
+  }
+
+  test("the social image is a cached 1200x630 PNG", async ({ request }) => {
+    const res = await request.get("/og");
+    expect(res.status()).toBe(200);
+    expect(res.headers()["content-type"]).toBe("image/png");
+    expect(res.headers()["cache-control"]).toContain("s-maxage");
+    const body = await res.body();
+    expect(body.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
+    expect(body.readUInt32BE(16)).toBe(1200);
+    expect(body.readUInt32BE(20)).toBe(630);
+  });
+
+  test("favicon and icons exist, and the footer links to the X profile", async ({ page, request }) => {
+    expect((await request.get("/favicon.ico")).status()).toBe(200);
+    expect((await request.get("/icon.svg")).status()).toBe(200);
+    await page.goto("/");
+    const link = page.locator("footer.site").getByRole("link", { name: /@proofoftooling/ });
+    await expect(link).toHaveAttribute("href", "https://x.com/proofoftooling");
+    await expect(link).toHaveAttribute("rel", /noopener/);
+  });
+});

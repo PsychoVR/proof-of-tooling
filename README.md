@@ -45,7 +45,7 @@ Other scripts: `npm run build`, `npm run test`, `npm run lint`, `npm run db:gene
 1. hPanel → **Websites** → **Create a website** → **Node.js web app** → import this repo from GitHub, branch `main`, Node.js 22.x. The build uses webpack (`next build --webpack`); Turbopack fails in Hostinger's build environment.
 2. hPanel → **Databases** → create a MySQL database and user.
 3. In the app → **Environment variables**: `DATABASE_URL=mysql://user:password@host:3306/database` and `CRON_SECRET=<long random string>`. Redeploy.
-4. Run the migrations against the production database (`npm run db:migrate` with the production `DATABASE_URL`).
+4. After every deploy, run the migrations: `curl -s -X POST -H "Authorization: Bearer $CRON_SECRET" https://tooling.sunshinevr.io/api/cron/migrate` (returns the migrations it applied).
 5. hPanel → **Advanced → Cron Jobs**, every 15 minutes:
    `curl -s -X POST -H "Authorization: Bearer <CRON_SECRET>" https://tooling.sunshinevr.io/api/cron/ping`
 

@@ -8,8 +8,8 @@ export const X_URL = "https://x.com/proofoftooling";
 export const DEFAULT_DESCRIPTION =
   "A public, verified directory of the tools Solana validators build. Validators prove ownership with a signed claim.";
 
-/** The social preview image shared by every page (see app/og/route.tsx). */
-export const OG_IMAGE = { url: "/og", width: 1200, height: 630, alt: `${SITE_NAME}. ${TAGLINE}` };
+/** The social preview image shared by every page (see app/og.png/route.tsx). */
+export const OG_IMAGE = { url: "/og.png", type: "image/png", width: 1200, height: 630, alt: `${SITE_NAME}. ${TAGLINE}` };
 
 const MAX_DESCRIPTION = 200;
 
@@ -48,7 +48,7 @@ export function pageMetadata(opts: { title?: string; description?: string; path?
       site: TWITTER_HANDLE,
       title: cardTitle,
       description,
-      images: [OG_IMAGE.url],
+      images: [{ url: OG_IMAGE.url, alt: OG_IMAGE.alt }],
     },
   };
 }

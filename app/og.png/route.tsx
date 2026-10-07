@@ -77,24 +77,42 @@ function png(body: ArrayBuffer, cacheControl: string) {
   return new Response(body, { headers: { "content-type": "image/png", "cache-control": cacheControl } });
 }
 
-/** Social preview of the home page with the live counters. Rendered once per 10 minutes per process. */
+let inflight: Promise<Response> | undefined;
+
+/** Renders with fresh counters and updates the memo. Concurrent callers share one render. */
+function refresh(): Promise<Response> {
+  return (inflight ??= (async () => {
+    let counters: Counters = null;
+    try {
+      const stats = await getStats();
+      counters = { tools: stats.toolsTotal, validators: stats.validatorsTotal };
+    } catch {
+      console.warn("social image: stats unavailable, rendering without counters");
+    }
+    try {
+      const body = await render(counters);
+      if (!counters) return png(body, OG_FALLBACK_CACHE_CONTROL);
+      memo = { at: Date.now(), body, counters };
+      return png(body, OG_CACHE_CONTROL);
+    } catch (err) {
+      console.error("social image failed:", err instanceof Error ? err.message : "unknown error");
+      if (memo) return png(memo.body, OG_FALLBACK_CACHE_CONTROL); // stale beats nothing
+      return new Response("unavailable", { status: 503, headers: { "cache-control": "no-store" } });
+    } finally {
+      inflight = undefined;
+    }
+  })());
+}
+
+/**
+ * Social preview of the home page with the live counters. Link-preview crawlers give up after a
+ * second or so, so a request never waits for a render when an older image exists: the stale image
+ * is served at once and a new one is rendered in the background. Counters may lag by one interval.
+ */
 export async function GET() {
-  if (memo && Date.now() - memo.at < OG_MEMO_MS) return png(memo.body, OG_CACHE_CONTROL);
-  let counters: Counters = null;
-  try {
-    const stats = await getStats();
-    counters = { tools: stats.toolsTotal, validators: stats.validatorsTotal };
-  } catch {
-    console.warn("social image: stats unavailable, rendering without counters");
+  if (memo) {
+    if (Date.now() - memo.at >= OG_MEMO_MS) void refresh();
+    return png(memo.body, OG_CACHE_CONTROL);
   }
-  try {
-    const body = await render(counters);
-    if (!counters) return png(body, OG_FALLBACK_CACHE_CONTROL);
-    memo = { at: Date.now(), body, counters };
-    return png(body, OG_CACHE_CONTROL);
-  } catch (err) {
-    console.error("social image failed:", err instanceof Error ? err.message : "unknown error");
-    if (memo) return png(memo.body, OG_FALLBACK_CACHE_CONTROL); // stale beats nothing
-    return new Response("unavailable", { status: 503, headers: { "cache-control": "no-store" } });
-  }
+  return refresh();
 }

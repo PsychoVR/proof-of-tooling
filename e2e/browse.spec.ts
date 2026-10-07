@@ -269,7 +269,9 @@ test.describe("social metadata and icons", () => {
       await page.goto(path);
       expect(await meta(page, 'meta[property="og:title"]')).toBe(title);
       expect(await meta(page, 'meta[property="og:description"]')).toBeTruthy();
-      expect(await meta(page, 'meta[property="og:image"]')).toMatch(/\/og$/);
+      expect(await meta(page, 'meta[property="og:image"]')).toMatch(/\/og\.png$/);
+      expect(await meta(page, 'meta[property="og:image:type"]')).toBe("image/png");
+      expect(await meta(page, 'meta[name="twitter:image:alt"]')).toBeTruthy();
       expect(await meta(page, 'meta[name="twitter:card"]')).toBe("summary_large_image");
       expect(await meta(page, 'meta[name="twitter:site"]')).toBe("@proofoftooling");
       expect(await meta(page, 'meta[name="description"]')).toBeTruthy();
@@ -277,15 +279,37 @@ test.describe("social metadata and icons", () => {
   }
 
   test("the social image is a cached 1200x630 PNG", async ({ request }) => {
-    const res = await request.get("/og");
+    const res = await request.get("/og.png");
     expect(res.status()).toBe(200);
     expect(res.headers()["content-type"]).toBe("image/png");
     expect(res.headers()["cache-control"]).toContain("s-maxage");
     const body = await res.body();
+    expect(body.length).toBeLessThan(300 * 1024);
     expect(body.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
     expect(body.readUInt32BE(16)).toBe(1200);
     expect(body.readUInt32BE(20)).toBe(630);
   });
+
+  test("/og redirects to /og.png", async ({ request }) => {
+    const res = await request.get("/og", { maxRedirects: 0 });
+    expect(res.status()).toBe(308);
+    expect(res.headers().location).toBe("/og.png");
+  });
+
+  for (const ua of ["WhatsApp/2.23.20.0", "facebookexternalhit/1.1", "TelegramBot"]) {
+    test(`link-preview crawler ${ua} sees og:image inside <head>`, async ({ request }) => {
+      const res = await request.get("/", { headers: { "user-agent": ua } });
+      expect(res.status()).toBe(200);
+      const html = await res.text();
+      const image = html.indexOf('property="og:image"');
+      expect(image).toBeGreaterThan(-1);
+      expect(image).toBeLessThan(html.indexOf("</head>"));
+      const img = await request.get("/og.png", { headers: { "user-agent": ua } });
+      expect(img.status()).toBe(200);
+      expect(img.headers()["content-type"]).toBe("image/png");
+      expect((await img.body()).length).toBeLessThan(300 * 1024);
+    });
+  }
 
   test("favicon and icons exist, and the footer links to the X profile", async ({ page, request }) => {
     expect((await request.get("/favicon.ico")).status()).toBe(200);

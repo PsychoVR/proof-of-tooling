@@ -9,7 +9,7 @@ describe("pageMetadata", () => {
     expect(m.description).toBe("All claims.");
     expect(m.alternates).toEqual({ canonical: "/registry" });
     expect(m.openGraph).toMatchObject({ type: "website", siteName: "Proof of Tooling", title: "Registry | Proof of Tooling", url: "/registry", images: [OG_IMAGE] });
-    expect(m.twitter).toMatchObject({ card: "summary_large_image", site: TWITTER_HANDLE, title: "Registry | Proof of Tooling", images: ["/og"] });
+    expect(m.twitter).toMatchObject({ card: "summary_large_image", site: TWITTER_HANDLE, title: "Registry | Proof of Tooling", images: [{ url: "/og.png", alt: OG_IMAGE.alt }] });
     expect(TWITTER_HANDLE).toBe("@proofoftooling");
   });
 
@@ -27,7 +27,7 @@ describe("pageMetadata", () => {
   });
 
   it("the shared image is 1200x630 with alt text", () => {
-    expect(OG_IMAGE).toMatchObject({ url: "/og", width: 1200, height: 630 });
+    expect(OG_IMAGE).toMatchObject({ url: "/og.png", type: "image/png", width: 1200, height: 630 });
     expect(OG_IMAGE.alt.length).toBeGreaterThan(10);
   });
 });

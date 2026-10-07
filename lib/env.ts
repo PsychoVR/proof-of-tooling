@@ -3,6 +3,10 @@ import { z } from "zod";
 const schema = z.object({
   DATABASE_URL: z.string().min(1),
   CRON_SECRET: z.string().min(16),
+  HELIUS_RPC_URL: z.string().url().optional(),
+  RPC_TESTNET_URL: z.string().url().optional(),
+  RPC_ALPENGLOW_URL: z.string().url().optional(),
+  GITHUB_TOKEN: z.string().min(1).optional(),
 });
 
 export type Env = z.infer<typeof schema>;

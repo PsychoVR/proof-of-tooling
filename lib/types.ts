@@ -1,0 +1,182 @@
+// Shared contracts between claims, data and UI code. Do not change without agreement.
+
+export const CLUSTERS = ["mainnet", "testnet", "alpenglow"] as const;
+export type Cluster = (typeof CLUSTERS)[number];
+
+export const CATEGORIES = [
+  "Monitoring",
+  "Explorer",
+  "Dashboard",
+  "Client",
+  "Ops script",
+  "Library",
+  "Meta",
+] as const;
+export type Category = (typeof CATEGORIES)[number];
+
+export const CLAIM_STATUSES = ["active", "stale", "withdrawn", "rejected"] as const;
+export type ClaimStatus = (typeof CLAIM_STATUSES)[number];
+
+export type ToolKind = "repo" | "web";
+export type ToolHealth = "active" | "slow" | "dormant" | "unknown";
+
+/** A tool is "claimed" when it has an active signed claim, otherwise "unclaimed" (seed entry). */
+export type ToolStatus = "claimed" | "unclaimed";
+
+export interface Validator {
+  identity: string;
+  cluster: Cluster;
+  voteAccount: string;
+  name: string | null;
+  website: string | null;
+  iconUrl: string | null;
+  activatedStake: string; // lamports as decimal string (exceeds JS safe ints)
+  version: string | null;
+  delinquent: boolean;
+  updatedAt: string; // ISO 8601
+}
+
+export interface Tool {
+  id: number;
+  slug: string;
+  url: string;
+  name: string;
+  category: Category;
+  kind: ToolKind;
+  isFork: boolean;
+  stars: number | null;
+  lastCommitAt: string | null;
+  health: ToolHealth;
+  createdAt: string;
+}
+
+export interface Claim {
+  id: number;
+  toolId: number;
+  identity: string;
+  cluster: Cluster;
+  message: string;
+  signature: string; // base58
+  signedDate: string; // YYYY-MM-DD
+  status: ClaimStatus;
+  verifiedAt: string;
+  lastCheckedAt: string | null;
+}
+
+export interface Endorsement {
+  id: number;
+  toolId: number;
+  identity: string;
+  message: string;
+  signature: string;
+  createdAt: string;
+}
+
+export interface ToolWithClaims extends Tool {
+  status: ToolStatus;
+  claims: Claim[];
+  claimedBy: Pick<Validator, "identity" | "cluster" | "name">[];
+}
+
+export interface ValidatorProfile {
+  validator: Validator;
+  tools: ToolWithClaims[];
+  endorsements: Endorsement[];
+}
+
+export interface Stats {
+  toolsTotal: number;
+  toolsClaimed: number;
+  toolsUnclaimed: number;
+  validatorsWithTools: number;
+  validatorsTotal: number;
+  byCategory: Record<Category, number>;
+  updatedAt: string;
+}
+
+// ---- API responses ----
+
+export interface Page<T> {
+  items: T[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+export interface LeaderboardRow {
+  validator: Validator;
+  toolCount: number;
+  claimedCount: number;
+  tools: Pick<Tool, "id" | "slug" | "name" | "category" | "url">[];
+}
+
+/** GET /api/v1/stats */
+export type StatsResponse = Stats;
+/** GET /api/v1/validators?cluster= */
+export type LeaderboardResponse = Page<LeaderboardRow>;
+/** GET /api/v1/validators/[identity] */
+export type ValidatorProfileResponse = ValidatorProfile;
+/** GET /api/v1/tools?category=&status= */
+export type ToolsResponse = { items: ToolWithClaims[] };
+
+export type ClaimAction = "claim" | "unclaim";
+
+export interface ParsedClaimMessage {
+  action: ClaimAction;
+  toolUrl: string; // normalized, e.g. github.com/org/repo
+  identity: string;
+  date: string; // YYYY-MM-DD
+  extras: Record<string, string>;
+}
+
+export interface ClaimRequest {
+  message: string;
+  signature: string;
+}
+
+export type ClaimCheckId =
+  | "format"
+  | "date"
+  | "encoding"
+  | "signature"
+  | "validator"
+  | "proof"
+  | "repo";
+
+export interface ClaimCheckResult {
+  id: ClaimCheckId;
+  ok: boolean;
+  detail?: string;
+}
+
+/** POST /api/v1/claims/check */
+export interface ClaimCheckResponse {
+  ok: boolean;
+  checks: ClaimCheckResult[];
+}
+
+/** POST /api/v1/claims */
+export interface ClaimResponse {
+  ok: boolean;
+  claim?: Claim;
+  checks: ClaimCheckResult[];
+}
+
+export interface RegistryEntry {
+  tool: Pick<Tool, "url" | "name" | "category">;
+  identity: string;
+  cluster: Cluster;
+  message: string;
+  signature: string;
+  status: ClaimStatus;
+}
+
+/** GET /registry.json */
+export interface RegistryResponse {
+  generatedAt: string;
+  entries: RegistryEntry[];
+}
+
+export interface ApiError {
+  error: string;
+}

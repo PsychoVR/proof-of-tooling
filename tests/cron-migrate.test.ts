@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const migrate = vi.fn();
@@ -7,6 +8,12 @@ vi.mock("drizzle-orm/mysql2/migrator", () => ({ migrate }));
 vi.mock("@/db", () => ({ getDb: () => ({ execute }) }));
 
 const { POST } = await import("@/app/api/cron/migrate/route");
+
+const journal: { entries: { tag: string; when: number }[] } = JSON.parse(
+  readFileSync("drizzle/meta/_journal.json", "utf8"),
+);
+const allRows = journal.entries.map((e) => ({ created_at: String(e.when) }));
+const tags = journal.entries.map((e) => e.tag);
 
 const SECRET = "x".repeat(32);
 const req = (auth?: string) =>
@@ -31,15 +38,15 @@ describe("POST /api/cron/migrate", () => {
   });
 
   it("reports migrations applied by this run", async () => {
-    execute.mockRejectedValueOnce(new Error("no table")).mockResolvedValueOnce([[{ created_at: "1791324596105" }]]);
+    execute.mockRejectedValueOnce(new Error("no table")).mockResolvedValueOnce([allRows]);
     migrate.mockResolvedValue(undefined);
     const res = await POST(req(`Bearer ${SECRET}`));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, applied: ["0000_flaky_psylocke"], total: 1 });
+    expect(await res.json()).toEqual({ ok: true, applied: tags, total: tags.length });
   });
 
   it("reports nothing when already up to date", async () => {
-    execute.mockResolvedValue([[{ created_at: 1791324596105 }]]);
+    execute.mockResolvedValue([allRows]);
     const body = await (await POST(req(`Bearer ${SECRET}`))).json();
     expect(body.applied).toEqual([]);
   });

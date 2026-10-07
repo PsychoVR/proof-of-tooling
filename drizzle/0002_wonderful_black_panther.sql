@@ -1,0 +1,1 @@
+ALTER TABLE `claims` MODIFY COLUMN `status` enum('active','pending','stale','withdrawn','rejected') NOT NULL DEFAULT 'active';

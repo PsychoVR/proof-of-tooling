@@ -14,7 +14,8 @@ export const CATEGORIES = [
 ] as const;
 export type Category = (typeof CATEGORIES)[number];
 
-export const CLAIM_STATUSES = ["active", "stale", "withdrawn", "rejected"] as const;
+/** `pending` = sent to manual review by the anti-abuse rules; it never counts in totals. */
+export const CLAIM_STATUSES = ["active", "pending", "stale", "withdrawn", "rejected"] as const;
 export type ClaimStatus = (typeof CLAIM_STATUSES)[number];
 
 export type ToolKind = "repo" | "web";
@@ -39,6 +40,7 @@ export interface Validator {
 export interface Tool {
   id: number;
   slug: string;
+  /** Canonical form from normalizeToolUrl: no scheme, no www., e.g. github.com/org/repo. */
   url: string;
   name: string;
   category: Category;
@@ -72,8 +74,16 @@ export interface Endorsement {
   createdAt: string;
 }
 
+/** Who builds or uses a tool. Seed entries carry only a name; claims add the identity. */
+export interface ToolOwner {
+  name: string;
+  identity: string | null;
+}
+
 export interface ToolWithClaims extends Tool {
   status: ToolStatus;
+  /** Owner from the seed entry (unclaimed) or from the claim (claimed). */
+  owner: ToolOwner | null;
   claims: Claim[];
   claimedBy: Pick<Validator, "identity" | "cluster" | "name">[];
 }
@@ -103,11 +113,18 @@ export interface Page<T> {
   total: number;
 }
 
+/** Per-tool state in a leaderboard row: a live signed claim or an expired one (listed, not counted). */
+export type LeaderboardToolStatus = "signed" | "stale";
+
+export interface LeaderboardTool extends Pick<Tool, "id" | "slug" | "name" | "category" | "url"> {
+  status: LeaderboardToolStatus;
+}
+
 export interface LeaderboardRow {
   validator: Validator;
   toolCount: number;
   claimedCount: number;
-  tools: Pick<Tool, "id" | "slug" | "name" | "category" | "url">[];
+  tools: LeaderboardTool[];
 }
 
 /** GET /api/v1/stats */
@@ -132,6 +149,10 @@ export interface ParsedClaimMessage {
 export interface ClaimRequest {
   message: string;
   signature: string;
+  /** Category chosen in the claim form; the server falls back to "Ops script" when missing. */
+  category?: Category;
+  /** Display name for a tool that is not yet in the database. */
+  toolName?: string;
 }
 
 export type ClaimCheckId =
@@ -139,9 +160,11 @@ export type ClaimCheckId =
   | "date"
   | "encoding"
   | "signature"
+  | "status"
   | "validator"
   | "proof"
-  | "repo";
+  | "repo"
+  | "rules";
 
 export interface ClaimCheckResult {
   id: ClaimCheckId;
@@ -152,12 +175,15 @@ export interface ClaimCheckResult {
 /** POST /api/v1/claims/check */
 export interface ClaimCheckResponse {
   ok: boolean;
+  /** True when every check passed but the rules require manual review before it counts. */
+  inReview?: boolean;
   checks: ClaimCheckResult[];
 }
 
 /** POST /api/v1/claims */
 export interface ClaimResponse {
   ok: boolean;
+  inReview?: boolean;
   claim?: Claim;
   checks: ClaimCheckResult[];
 }

@@ -1,3 +1,4 @@
+import { normalizeToolUrl } from "@/lib/claims/message";
 import type { Category, Claim, Stats, ToolWithClaims, Validator, ValidatorProfile } from "@/lib/types";
 
 const NOW = "2026-10-07T12:00:00.000Z";
@@ -34,6 +35,7 @@ const t = (
   signed = false,
 ): ToolWithClaims => {
   const id = ++toolId;
+  const canonical = normalizeToolUrl(url);
   const claims: Claim[] = signed
     ? [
         {
@@ -41,7 +43,7 @@ const t = (
           toolId: id,
           identity: owner.identity,
           cluster: owner.cluster,
-          message: `proof-of-tooling v1 | claim | ${url.replace(/^https?:\/\//, "")} | ${owner.identity} | 2026-10-06`,
+          message: `proof-of-tooling v1 | claim | ${canonical} | ${owner.identity} | 2026-10-06`,
           signature: "ExampleSignature".padEnd(88, "1"),
           signedDate: "2026-10-06",
           status: "active",
@@ -53,16 +55,17 @@ const t = (
   return {
     id,
     slug: name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""),
-    url,
+    url: canonical,
     name,
     category,
-    kind: url.includes("github.com") ? "repo" : "web",
+    kind: canonical.startsWith("github.com/") ? "repo" : "web",
     isFork: false,
-    stars: url.includes("github.com") ? 120 : null,
-    lastCommitAt: url.includes("github.com") ? NOW : null,
+    stars: canonical.startsWith("github.com/") ? 120 : null,
+    lastCommitAt: canonical.startsWith("github.com/") ? NOW : null,
     health: "active",
     createdAt: NOW,
     status: signed ? "claimed" : "unclaimed",
+    owner: { name: owner.name ?? owner.identity, identity: signed ? owner.identity : null },
     claims,
     claimedBy: signed ? [{ identity: owner.identity, cluster: owner.cluster, name: owner.name }] : [],
   };

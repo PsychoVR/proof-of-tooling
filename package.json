@@ -8,31 +8,45 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build --webpack",
+    "build": "next build --webpack && node scripts/check-prod-bundle.mjs",
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose down",
+    "db:reset": "docker compose down -v && docker compose up -d --wait && npm run db:migrate",
+    "db:seed": "tsx --env-file-if-exists=.env db/seed.ts",
+    "db:seed:dev": "tsx --env-file-if-exists=.env db/dev-seed.ts",
+    "test:db": "vitest run --config vitest.db.config.ts",
+    "check:bundle": "node scripts/check-prod-bundle.mjs"
   },
   "dependencies": {
+    "bs58": "^6.0.0",
     "drizzle-orm": "^0.45.3",
     "mysql2": "^3.24.5",
     "next": "^16.4.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
+    "tldts": "^7.4.16",
+    "tweetnacl": "^1.0.3",
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^26.6.4",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@vitest/coverage-v8": "^4.1.11",
     "drizzle-kit": "^0.31.11",
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.4.0",
     "postcss": "^8.5.29",
     "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.15",
     "typescript": "^6.0.3",
     "vitest": "^4.1.11"
   }

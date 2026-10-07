@@ -1,29 +1,10 @@
-import { NotImplemented } from "@/lib/errors";
-import type { ClaimCheckResult, ParsedClaimMessage } from "@/lib/types";
-
-/** Parses a v1 claim line. Returns null when the format is invalid. */
-export function parseClaimMessage(_message: string): ParsedClaimMessage | null {
-  throw new NotImplemented("parseClaimMessage");
-}
-
-/** Wraps the message in the Solana off-chain v0 envelope (restricted ASCII). */
-export function serializeOffchainV0(_message: string): Uint8Array {
-  throw new NotImplemented("serializeOffchainV0");
-}
-
-/** Verifies an Ed25519 signature (base58) over the off-chain v0 serialization. */
-export function verifyClaimSignature(
-  _message: string,
-  _signature: string,
-  _identity: string,
-): boolean {
-  throw new NotImplemented("verifyClaimSignature");
-}
-
-/** Fetches the proof file of a tool and checks that it lists the identity. */
-export async function checkProofFile(
-  _toolUrl: string,
-  _identity: string,
-): Promise<ClaimCheckResult> {
-  throw new NotImplemented("checkProofFile");
-}
+export { buildClaimMessage, isPrintableAscii, isValidDate, normalizeToolUrl, parseClaimMessage, toolDisplayUrl } from "./message";
+export { serializeOffchainV0 } from "./offchain";
+export { isValidPubkey, verifyClaimSignature } from "./verify";
+export { mergeClaim } from "./merge";
+export type { IncomingClaimState, StoredClaimState } from "./merge";
+export type { VerifyInput, VerifyResult } from "./verify";
+export { checkProofFile, proofFileUrl, registrableDomain } from "./proof";
+export type { Fetcher, FetchedFile } from "./proof";
+export { evaluateRepoRules, evaluateWebRules, MAX_PENDING_PER_IDENTITY, MAX_TOOLS_PER_DOMAIN } from "./rules";
+export type { RepoMetadata, RuleContext, RuleDecision, RuleOutcome, WebRuleContext } from "./rules";

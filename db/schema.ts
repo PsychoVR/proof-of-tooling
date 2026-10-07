@@ -106,3 +106,17 @@ export const seedEntries = mysqlTable(
   },
   (t) => [index("seed_entries_tool_idx").on(t.toolId)],
 );
+
+/** Moderation audit trail: one row per approve or reject decision on a pending claim. */
+export const claimDecisions = mysqlTable(
+  "claim_decisions",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    claimId: int("claim_id").notNull().references(() => claims.id),
+    decision: mysqlEnum("decision", ["approve", "reject"]).notNull(),
+    previousStatus: mysqlEnum("previous_status", CLAIM_STATUSES).notNull(),
+    actor: varchar("actor", { length: 64 }).notNull(),
+    decidedAt: timestamp("decided_at").defaultNow().notNull(),
+  },
+  (t) => [index("claim_decisions_claim_idx").on(t.claimId)],
+);

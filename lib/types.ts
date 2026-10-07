@@ -10,6 +10,7 @@ export const CATEGORIES = [
   "Client",
   "Ops script",
   "Library",
+  "App",
   "Meta",
 ] as const;
 export type Category = (typeof CATEGORIES)[number];

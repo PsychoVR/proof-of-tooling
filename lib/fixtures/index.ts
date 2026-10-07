@@ -97,6 +97,7 @@ export const fixtureStats: Stats = {
     Client: 1,
     "Ops script": 0,
     Library: 0,
+    App: 0,
     Meta: 1,
   },
   updatedAt: NOW,

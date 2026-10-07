@@ -36,6 +36,13 @@
       "when": 1791376632960,
       "tag": "0004_claim_decisions",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1791394000516,
+      "tag": "0005_tool_category_app",
+      "breakpoints": true
     }
   ]
 }

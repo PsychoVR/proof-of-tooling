@@ -1,0 +1,1 @@
+ALTER TABLE `tools` MODIFY COLUMN `category` enum('Monitoring','Explorer','Dashboard','Client','Ops script','Library','App','Meta') NOT NULL;

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ThemeToggle } from "./ThemeToggle";
 import { CLUSTER_SCOPE_LABEL } from "@/lib/clusters";
 
 const LINKS = [
@@ -38,6 +39,7 @@ export function SiteHeader() {
             </Link>
           ))}
         </nav>
+        <ThemeToggle />
       </div>
     </header>
   );

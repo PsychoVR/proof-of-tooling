@@ -320,3 +320,37 @@ test.describe("social metadata and icons", () => {
     await expect(link).toHaveAttribute("rel", /noopener/);
   });
 });
+
+test.describe("theme", () => {
+  const theme = (page: import("@playwright/test").Page) => page.locator("html").getAttribute("data-theme");
+
+  test("loads dark with no saved choice, even when the system prefers light", async ({ browser }) => {
+    const context = await browser.newContext({ colorScheme: "light" });
+    const page = await context.newPage();
+    await page.goto("/");
+    expect(await theme(page)).toBe("dark");
+    expect(await page.locator('meta[name="theme-color"]').getAttribute("content")).toBe("#0f1514");
+    expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgb(15, 21, 20)");
+    await context.close();
+  });
+
+  test("switching to light survives a reload and updates the browser colours", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "Switch to light theme" }).click();
+    expect(await theme(page)).toBe("light");
+    expect(await page.evaluate(() => localStorage.getItem("theme"))).toBe("light");
+    await page.reload();
+    expect(await theme(page)).toBe("light");
+    expect(await page.locator('meta[name="theme-color"]').getAttribute("content")).toBe("#f2f4f3");
+    expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgb(242, 244, 243)");
+    await page.getByRole("button", { name: "Switch to dark theme" }).click();
+    await page.reload();
+    expect(await theme(page)).toBe("dark");
+  });
+
+  test("an invalid saved value falls back to dark", async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem("theme", "purple"));
+    await page.goto("/registry");
+    expect(await theme(page)).toBe("dark");
+  });
+});

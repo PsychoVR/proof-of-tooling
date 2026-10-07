@@ -1,0 +1,1 @@
+UPDATE `tools` SET `url` = LOWER(`url`) WHERE `url` LIKE 'github.com/%' AND `url` <> LOWER(`url`) AND NOT EXISTS (SELECT 1 FROM (SELECT `url` FROM `tools`) AS `other` WHERE `other`.`url` = LOWER(`tools`.`url`));

@@ -79,7 +79,7 @@ test.describe("profiles and tools", () => {
     const c = watchConsole(page);
     await page.goto(`/v/${V.overclock.identity}`);
     await expect(page.getByRole("heading", { name: "Overclock", level: 1 })).toBeVisible();
-    await expect(page.getByText("github.com/Overclock-Validator/mithril")).toBeVisible();
+    await expect(page.getByText("github.com/overclock-validator/mithril")).toBeVisible();
     await expect(page.locator(".status", { hasText: "✓ Signed" })).toBeVisible();
     await page.goto(`/v/${V.pumpkin.identity}`);
     await expect(page.locator(".list li")).toHaveCount(3); // 2 signed tools + 1 endorsement

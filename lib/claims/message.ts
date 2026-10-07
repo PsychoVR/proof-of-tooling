@@ -14,7 +14,8 @@ export function isPrintableAscii(s: string): boolean {
 
 /**
  * Canonical tool URL: no scheme, no `www.`, lowercase host, no query/hash,
- * no trailing slash and no `.git` suffix (the path keeps its case).
+ * no trailing slash and no `.git` suffix. The path keeps its case, except on github.com where it is
+ * lowercased (GitHub treats owner and repo names case-insensitively).
  */
 export function normalizeToolUrl(raw: string): string {
   const stripped = raw
@@ -26,7 +27,10 @@ export function normalizeToolUrl(raw: string): string {
     .replace(/\/+$/, "");
   const slash = stripped.indexOf("/");
   const host = (slash === -1 ? stripped : stripped.slice(0, slash)).toLowerCase().replace(/^www\./, "");
-  return slash === -1 ? host : host + stripped.slice(slash);
+  if (slash === -1) return host;
+  const path = stripped.slice(slash);
+  // GitHub owners and repos are case-insensitive, so one repo has exactly one canonical URL.
+  return host === "github.com" ? host + path.toLowerCase() : host + path;
 }
 
 /** Adds the scheme for display and links; storage always uses the canonical form. */

@@ -12,7 +12,7 @@ export async function POST(req: Request) {
   try {
     return NextResponse.json({ ok: true, ...(await seedUnclaimed()) });
   } catch (err) {
-    console.error("seed failed", err);
+    console.error("seed failed:", err instanceof Error ? err.message : "unknown error");
     return NextResponse.json({ ok: false, error: "seed failed" }, { status: 500 });
   }
 }

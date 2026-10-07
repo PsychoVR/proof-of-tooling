@@ -37,7 +37,7 @@ export async function POST(req: Request) {
     const applied = journal.entries.filter((e) => after.has(e.when) && !before.has(e.when)).map((e) => e.tag);
     return NextResponse.json({ ok: true, applied, total: journal.entries.length });
   } catch (err) {
-    console.error("migrate failed", err);
+    console.error("migrate failed:", err instanceof Error ? err.message : "unknown error");
     return NextResponse.json({ ok: false, error: "migration failed" }, { status: 500 });
   }
 }

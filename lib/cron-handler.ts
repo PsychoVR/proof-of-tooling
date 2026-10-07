@@ -9,7 +9,7 @@ export async function runCron(req: Request, job: () => Promise<unknown>): Promis
   try {
     return NextResponse.json({ ok: true, result: await job() });
   } catch (err) {
-    console.error("cron job failed", err instanceof Error ? err.message : err);
+    console.error("cron job failed:", err instanceof Error ? err.message : "unknown error");
     return NextResponse.json({ ok: false, error: "job failed" }, { status: 500 });
   }
 }

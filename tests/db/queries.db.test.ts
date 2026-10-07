@@ -139,7 +139,7 @@ describe("getTools / getToolBySlug", () => {
   });
 
   it("finds a tool by slug with its canonical url", async () => {
-    expect(await getToolBySlug("mithril")).toMatchObject({ name: "Mithril", url: "github.com/Overclock-Validator/mithril", kind: "repo", status: "claimed" });
+    expect(await getToolBySlug("mithril")).toMatchObject({ name: "Mithril", url: "github.com/overclock-validator/mithril", kind: "repo", status: "claimed" });
     expect(await getToolBySlug("nope")).toBeNull();
   });
 });

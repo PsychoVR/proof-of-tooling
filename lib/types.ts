@@ -167,10 +167,15 @@ export type ClaimCheckId =
   | "repo"
   | "rules";
 
+/** Where an ownership proof was found. */
+export type ProofVia = "repo" | "account" | "well-known" | "dns" | "meta";
+
 export interface ClaimCheckResult {
   id: ClaimCheckId;
   ok: boolean;
   detail?: string;
+  /** Only on a passing "proof" check: the location that matched. */
+  via?: ProofVia;
 }
 
 /** POST /api/v1/claims/check */

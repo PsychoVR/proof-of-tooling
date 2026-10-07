@@ -16,6 +16,7 @@ import {
   validateToolUrl,
 } from "@/lib/ui/claim";
 import { CodeBlock } from "./CodeBlock";
+import { WebProofTabs } from "./WebProofTabs";
 
 const PROOF_FILE = ".proof-of-tooling.json";
 const STEPS = ["Describe the tool", "Sign the claim", "Verify the signature"];
@@ -152,19 +153,18 @@ export function ClaimWizard() {
                       Create proof file on GitHub
                     </a>
                   </div>
+                  <p className="note">
+                    Own several tools? Put the same file in your <code>{target.accountRepos[0]}</code> or{" "}
+                    <code>{target.accountRepos[1]}</code> repo instead and it covers all your repos; claims proved this way are reviewed manually.
+                  </p>
                 </>
               ) : (
-                <>
-                  <p className="lede">
-                    Serve this JSON at exactly <code>{target.where}</code>. It covers every URL under {target.host}.
-                  </p>
-                  <CodeBlock text={proofJson(identity)} />
-                </>
+                <WebProofTabs host={target.host} identity={identity.trim()} />
               )}
             </section>
           )}
           <p className="lede">
-            Then run the machine that holds your identity keypair. It signs one line and prints a base58
+            Then run this on the machine that holds your identity keypair. It signs one line and prints a base58
             signature. Nothing leaves your machine, and we never ask for the keypair.
           </p>
           <CodeBlock text={signCommand(message)} />
@@ -209,7 +209,7 @@ export function ClaimWizard() {
                     <li key={c.id} className={c.ok ? "" : "x"}>
                       {CHECK_LABELS[c.id]}
                       {c.detail ? ` (${c.detail})` : ""}
-                      {c.id === "proof" && !c.ok && proofHint(url) ? ` ${proofHint(url)}` : ""}
+                      {c.id === "proof" && !c.ok && proofHint(url, identity) ? ` ${proofHint(url, identity)}` : ""}
                     </li>
                   ))}
                 </ul>

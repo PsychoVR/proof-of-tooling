@@ -13,11 +13,16 @@ const line = `proof-of-tooling v1 | claim | github.com/org/repo | ${ID} | 2026-1
 
 describe("normalizeToolUrl", () => {
   it("strips scheme and trailing slashes, lowercases the host only", () => {
-    expect(normalizeToolUrl("  HTTPS://GitHub.com/Org/Repo// ")).toBe("github.com/Org/Repo");
+    expect(normalizeToolUrl("  HTTPS://GitHub.com/Org/Repo// ")).toBe("github.com/org/repo");
     expect(normalizeToolUrl("http://Example.COM/")).toBe("example.com");
     expect(normalizeToolUrl("example.com")).toBe("example.com");
     expect(normalizeToolUrl("https://www.Example.com/")).toBe("example.com");
-    expect(normalizeToolUrl("github.com/Org/Repo.git/")).toBe("github.com/Org/Repo");
+    expect(normalizeToolUrl("github.com/Org/Repo.git/")).toBe("github.com/org/repo");
+    // GitHub is case-insensitive, other hosts keep the case of their path.
+    expect(normalizeToolUrl("github.com/Org/Repo")).toBe(normalizeToolUrl("github.com/ORG/repo"));
+    expect(normalizeToolUrl("github.com/psychovr/proof-of-tooling")).toBe("github.com/psychovr/proof-of-tooling");
+    expect(normalizeToolUrl("example.com/Tool/Path")).toBe("example.com/Tool/Path");
+    expect(normalizeToolUrl("gist.github.com/Foo/Bar")).toBe("gist.github.com/Foo/Bar");
     expect(normalizeToolUrl("https://example.com/tool?x=1#top")).toBe("example.com/tool");
     expect(toolDisplayUrl("example.com")).toBe("https://example.com");
   });

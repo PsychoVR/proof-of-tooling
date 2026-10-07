@@ -8,11 +8,25 @@ Live at [tooling.sunshinevr.io](https://tooling.sunshinevr.io). Built by [Sunshi
 
 ## How claiming works
 
-1. Add `.proof-of-tooling.json` to the root of your repo (or `/.well-known/proof-of-tooling.json` on your site):
+1. Prove you own the tool. The proof lists your validator identity pubkey and is checked on every claim and again periodically, so keep it in place.
+
+   **GitHub repos.** Add `.proof-of-tooling.json` to the root of the repo's default branch:
 
    ```json
    { "identities": ["<your validator identity pubkey>"] }
    ```
+
+   To cover all your repos at once, put the same file in `github.com/<owner>/.github` or in your profile repo `github.com/<owner>/<owner>`. Only the owner named in the claimed URL is consulted. The repo's own file is checked first. Claims proved only by an account-level file are never approved automatically: they wait for a manual review.
+
+   **Websites.** Any one of these is enough. Each is valid only for the exact host you claim (`tool.example.com` does not cover `example.com` or `other.example.com`), and bare shared suffixes such as `vercel.app` or `github.io` are not supported, while `you.vercel.app` is.
+
+   - A file at `https://<host>/.well-known/proof-of-tooling.json` with the same JSON as above.
+   - A DNS TXT record on `<host>` with the value `proof-of-tooling=<your validator identity pubkey>`.
+   - A tag inside the `<head>` of `https://<host>/`:
+
+     ```html
+     <meta name="proof-of-tooling" content="<your validator identity pubkey>">
+     ```
 
 2. Sign the claim line with your identity key:
 
@@ -50,6 +64,17 @@ Other scripts: `npm run build`, `npm run test`, `npm run lint`, `npm run db:gene
    `curl -s -X POST -H "Authorization: Bearer <CRON_SECRET>" https://tooling.sunshinevr.io/api/cron/ping`
 
 Check: `GET /api/health` returns `"db": true`, and `lastHeartbeat` advances on its own.
+
+### Client IP and rate limiting
+
+Rate limits are keyed by client IP. The first `X-Forwarded-For` value is client-controlled and is never trusted. Pick one of the options below depending on what your proxy sets:
+
+- `TRUSTED_IP_HEADER=x-real-ip` (or whichever header your proxy sets with the real client address). Used when it holds a valid IP.
+- `TRUSTED_PROXY_HOPS=<n>` (default `1`): number of trusted proxies in front of the app. The client IP is the `X-Forwarded-For` entry that many positions from the right.
+
+Per-IP limits only block once one of these two variables is set. Until then they run in log-only mode: requests are counted and a would-be block is logged, but never refused, so a first deploy cannot lock anyone out. To pick the header, call `GET /api/admin/debug/ip` with `Authorization: Bearer $ADMIN_SECRET`: it echoes `x-forwarded-for`, `x-real-ip`, `forwarded`, `cf-connecting-ip` and `x-client-ip` as the proxy delivered them (nothing is stored). Per-identity limits are not affected.
+
+If the IP cannot be determined, the request falls into a single shared bucket with a stricter limit. Claim requests are additionally limited per claimed identity.
 
 ## License
 

@@ -14,6 +14,7 @@ function deps(over: Partial<ClaimsDeps> = {}): ClaimsDeps {
   return {
     now: () => new Date("2026-10-07T00:00:00Z"),
     fetcher: async () => ({ status: 200, body: JSON.stringify({ identities: [ID] }) }),
+    resolveTxt: async () => [],
     findValidatorCluster: async () => "mainnet",
     getRepoMetadata: async () => ({ isPrivate: false, archived: false, isFork: false, commitCount: 40, ownCommits: 40, createdAt: "2026-01-01T00:00:00Z" }),
     getHistory: async () => ({ existing: null, identityClaimsLast24h: 0, otherClaimants: 0 }),

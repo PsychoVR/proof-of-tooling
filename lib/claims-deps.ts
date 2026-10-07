@@ -1,14 +1,23 @@
 import { createHash } from "node:crypto";
-import { and, count, eq, gte, inArray, ne } from "drizzle-orm";
+import { and, count, eq, gte, notExists, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { claims, tools, validators } from "@/db/schema";
+import { claims, seedEntries, tools, validators } from "@/db/schema";
 import { ENABLED_CLUSTERS } from "@/lib/clusters";
 import { getEnv } from "@/lib/env";
 import { e2eOverrides } from "@/lib/claims-stub";
+import { resolveTxt } from "@/lib/dns-txt";
 import { safeFetcher } from "@/lib/safe-fetch";
 import type { Fetcher, RepoMetadata } from "@/lib/claims";
-import { MAX_PENDING_PER_IDENTITY, mergeClaim, proofFileUrl, registrableDomain } from "@/lib/claims";
-import { PendingLimitError, type ClaimsDeps } from "@/lib/claims-service";
+import {
+  evaluateRepoRules,
+  evaluateWebRules,
+  MAX_PENDING_PER_IDENTITY,
+  MAX_TOOLS_CREATED_PER_IDENTITY,
+  mergeClaim,
+  proofFileUrl,
+} from "@/lib/claims";
+import { readCounters } from "@/lib/claims-counters";
+import { PendingLimitError, RuleRejectedError, ToolQuotaError, UnknownValidatorError, type ClaimsDeps } from "@/lib/claims-service";
 import type { Claim, ClaimStatus, Cluster } from "@/lib/types";
 
 const FETCH_TIMEOUT_MS = 5000;
@@ -58,30 +67,105 @@ const toClaim = (r: ClaimRow): Claim => ({
   lastCheckedAt: r.lastCheckedAt?.toISOString() ?? null,
 });
 
-/** Other web tools of this identity (active or pending) under the same registrable domain. */
-async function sameDomainClaims(toolUrl: string, identity: string): Promise<number> {
-  const domain = registrableDomain(toolUrl);
-  if (!domain) return 0;
-  const rows = await getDb()
-    .select({ url: tools.url })
-    .from(claims)
-    .innerJoin(tools, eq(tools.id, claims.toolId))
-    .where(and(eq(claims.identity, identity), inArray(claims.status, ["active", "pending"]), eq(tools.kind, "web")));
-  return rows.filter((r) => r.url !== toolUrl && registrableDomain(r.url) === domain).length;
-}
-
 type Tx = Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0];
 
-/** A slug nobody else uses: the readable one, or with a short hash of the url when it is taken. */
-async function freeSlug(tx: Tx, toolUrl: string): Promise<string> {
-  const slug = slugOf(toolUrl);
-  const taken = await tx.select({ url: tools.url }).from(tools).where(eq(tools.slug, slug));
-  if (taken.length === 0) return slug;
-  return `${slug.slice(0, 120)}-${createHash("sha1").update(toolUrl).digest("hex").slice(0, 7)}`;
+/** The readable slug with a short hash of the url, used when the readable one is taken. */
+const hashedSlug = (toolUrl: string) => `${slugOf(toolUrl).slice(0, 120)}-${createHash("sha1").update(toolUrl).digest("hex").slice(0, 7)}`;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const MAX_ATTEMPTS = 6;
+/** Validators not seen by the ingest for this long are ignored when resolving a claimant. */
+const VALIDATOR_MAX_AGE_MS = 3 * 86_400_000;
+
+type SaveInput = Parameters<ClaimsDeps["saveClaim"]>[0];
+
+async function saveInTx(tx: Tx, input: SaveInput): Promise<Claim> {
+  // One lock per identity serializes its claims. An unknown identity stores nothing.
+  const [lock] = await tx
+    .select({ id: validators.id })
+    .from(validators)
+    .where(eq(validators.identity, input.identity))
+    .orderBy(validators.id)
+    .limit(1)
+    .for("update");
+  if (!lock) throw new UnknownValidatorError();
+
+  // Plain reads from here on: the snapshot starts after the lock, so it includes this identity's earlier requests.
+  let [tool] = await tx.select().from(tools).where(eq(tools.url, input.toolUrl));
+  let existing: ClaimRow | undefined;
+  if (tool) {
+    [existing] = await tx.select().from(claims).where(and(eq(claims.toolId, tool.id), eq(claims.identity, input.identity)));
+    // Lock the stored row by primary key (record lock only, no gap) so a moderation decision cannot interleave.
+    if (existing) [existing] = await tx.select().from(claims).where(eq(claims.id, existing.id)).for("update");
+  }
+
+  let status: ClaimStatus = input.action === "unclaim" ? "withdrawn" : input.pending ? "pending" : "active";
+  if (existing && mergeClaim(existing, { status, signedDate: input.signedDate }) === "keep") return toClaim(existing);
+
+  if (input.action === "claim" && input.recheck) {
+    const c = await readCounters(tx, input.toolUrl, input.identity, input.recheck.now);
+    const ctx = {
+      now: input.recheck.now,
+      identityClaimsLast24h: c.identityClaimsLast24h,
+      alreadyClaimedBySameIdentity: false,
+      otherClaimants: c.otherClaimants,
+      identityActiveClaims: c.identityActiveClaims,
+    };
+    let outcome;
+    if (proofFileUrl(input.toolUrl)?.kind === "repo") {
+      if (!input.recheck.repo) throw new Error("repository metadata is required to re-check the rules");
+      outcome = evaluateRepoRules(input.recheck.repo, ctx);
+    } else {
+      outcome = evaluateWebRules({ ...ctx, sameDomainClaims: c.sameDomainClaims, domainClaimsAllIdentities: c.domainClaimsAllIdentities });
+    }
+    if (outcome.decision === "reject") throw new RuleRejectedError(outcome.reasons);
+    if (outcome.decision === "review") status = "pending";
+  }
+
+  if (status === "pending" && existing?.status !== "pending") {
+    const [pending] = await tx.select({ n: count() }).from(claims).where(and(eq(claims.identity, input.identity), eq(claims.status, "pending")));
+    if (pending.n >= MAX_PENDING_PER_IDENTITY) throw new PendingLimitError();
+  }
+
+  if (!tool) {
+    // Claim and unclaim churn keeps the claim rows, so it cannot free quota to create more tools.
+    const [created] = await tx
+      .select({ n: count() })
+      .from(claims)
+      .innerJoin(tools, eq(tools.id, claims.toolId))
+      .where(and(eq(claims.identity, input.identity), notExists(tx.select({ one: seedEntries.id }).from(seedEntries).where(eq(seedEntries.toolId, tools.id)))));
+    if (created.n >= MAX_TOOLS_CREATED_PER_IDENTITY) throw new ToolQuotaError();
+    tool = await createTool(tx, input);
+  }
+
+  const values = { cluster: input.cluster, message: input.message, signature: input.signature, signedDate: input.signedDate, status, verifiedAt: new Date(), lastCheckedAt: null, failures: 0 };
+  if (existing) await tx.update(claims).set(values).where(eq(claims.id, existing.id));
+  else await tx.insert(claims).values({ toolId: tool.id, identity: input.identity, ...values });
+  const [row] = await tx.select().from(claims).where(and(eq(claims.toolId, tool.id), eq(claims.identity, input.identity)));
+  return toClaim(row);
+}
+
+/**
+ * Creates the tool if nobody did, without ever failing on a duplicate: the first claimant's row wins.
+ * The readable slug can collide with another tool's, in which case the second attempt uses a hashed one.
+ */
+async function createTool(tx: Tx, input: SaveInput): Promise<typeof tools.$inferSelect> {
+  const kind = proofFileUrl(input.toolUrl)?.kind ?? "web";
+  const name = input.toolName?.trim() || (input.toolUrl.split("/").pop() ?? input.toolUrl);
+  for (const slug of [slugOf(input.toolUrl), hashedSlug(input.toolUrl)]) {
+    await tx
+      .insert(tools)
+      .values({ slug, url: input.toolUrl, name, category: input.category ?? "Ops script", kind })
+      .onDuplicateKeyUpdate({ set: { id: sql`id` } });
+    // Locking read: waits for a concurrent creator to commit and sees its row.
+    const [row] = await tx.select().from(tools).where(eq(tools.url, input.toolUrl)).for("update");
+    if (row) return row;
+  }
+  throw new Error("could not create the tool: slug unavailable");
 }
 
 function isRetryable(err: unknown): boolean {
-  const codes = new Set(["ER_DUP_ENTRY", "ER_LOCK_DEADLOCK", "ER_LOCK_WAIT_TIMEOUT"]);
+  const codes = new Set(["ER_DUP_ENTRY", "ER_LOCK_DEADLOCK", "ER_LOCK_WAIT_TIMEOUT", "ER_CHECKREAD"]);
   for (let e = err as { code?: string; cause?: unknown } | undefined, i = 0; e && i < 4; e = e.cause as typeof e, i++) {
     if (e.code && codes.has(e.code)) return true;
   }
@@ -94,77 +178,52 @@ export function createClaimsDeps(): ClaimsDeps {
   return {
     now: () => new Date(),
     fetcher: safeFetcher,
+    resolveTxt,
     getRepoMetadata,
 
     async findValidatorCluster(identity) {
-      const rows = await getDb().select({ cluster: validators.cluster }).from(validators).where(eq(validators.identity, identity));
+      // Validators the ingest has not refreshed recently may have left the set: they cannot claim.
+      const fresh = gte(validators.updatedAt, new Date(Date.now() - VALIDATOR_MAX_AGE_MS));
+      const rows = await getDb().select({ cluster: validators.cluster }).from(validators).where(and(eq(validators.identity, identity), fresh));
       const clusters = rows.map((r) => r.cluster as Cluster).filter((c) => ENABLED_CLUSTERS.includes(c));
       return clusters.includes("mainnet") ? "mainnet" : (clusters[0] ?? null);
     },
 
     async getHistory(toolUrl, identity) {
       const db = getDb();
+      const c = await readCounters(db, toolUrl, identity, new Date());
       const [tool] = await db.select().from(tools).where(eq(tools.url, toolUrl));
-      const since = new Date(Date.now() - 86_400_000);
-      const [recent] = await db.select({ n: count() }).from(claims).where(and(eq(claims.identity, identity), gte(claims.verifiedAt, since)));
-      const [pending] = await db.select({ n: count() }).from(claims).where(and(eq(claims.identity, identity), eq(claims.status, "pending")));
-      if (!tool) return { existing: null, identityClaimsLast24h: recent.n, otherClaimants: 0, sameDomainClaims: await sameDomainClaims(toolUrl, identity), pendingClaims: pending.n };
-      const [existing] = await db.select().from(claims).where(and(eq(claims.toolId, tool.id), eq(claims.identity, identity)));
-      const [others] = await db.select({ n: count() }).from(claims).where(and(eq(claims.toolId, tool.id), ne(claims.identity, identity), eq(claims.status, "active")));
+      const [existing] = tool ? await db.select().from(claims).where(and(eq(claims.toolId, tool.id), eq(claims.identity, identity))) : [];
       return {
         existing: existing ? toClaim(existing) : null,
-        identityClaimsLast24h: recent.n,
-        otherClaimants: others.n,
-        sameDomainClaims: await sameDomainClaims(toolUrl, identity),
-        pendingClaims: pending.n,
+        identityClaimsLast24h: c.identityClaimsLast24h,
+        otherClaimants: c.otherClaimants,
+        sameDomainClaims: c.sameDomainClaims,
+        domainClaimsAllIdentities: c.domainClaimsAllIdentities,
+        identityActiveClaims: c.identityActiveClaims,
+        pendingClaims: c.pendingClaims,
       };
     },
 
     /**
-     * Stores a verified claim. Runs in one transaction that locks the identity and the stored claim
-     * row (SELECT ... FOR UPDATE) so that concurrent requests are serialized, and decides in JS
-     * (mergeClaim) whether the incoming message replaces the stored one.
+     * Stores a verified claim in one transaction. The only lock taken before reading is on the
+     * identity's validator row, which serializes that identity's requests: the counters behind the
+     * anti-abuse rules and the pending limit are recomputed under it, so concurrent requests cannot
+     * all pass on stale numbers. Rows that may not exist yet are never locked (no gap locks): the
+     * tool is created with an idempotent INSERT ... ON DUPLICATE KEY, and the claim row is locked by
+     * primary key only when it exists. Deadlocks and duplicate keys between different identities are
+     * retried with exponential backoff and jitter; anything else fails closed.
      */
     async saveClaim(input) {
       const db = getDb();
       for (let attempt = 0; ; attempt++) {
         try {
-          return await db.transaction(async (tx) => {
-            // One lock per identity serializes its claims, which also makes the pending limit exact.
-            await tx.select({ id: validators.id }).from(validators).where(eq(validators.identity, input.identity)).for("update");
-
-            let [tool] = await tx.select().from(tools).where(eq(tools.url, input.toolUrl));
-            if (!tool) {
-              const kind = proofFileUrl(input.toolUrl)?.kind ?? "web";
-              const name = input.toolName?.trim() || (input.toolUrl.split("/").pop() ?? input.toolUrl);
-              const slug = await freeSlug(tx, input.toolUrl);
-              await tx.insert(tools).values({ slug, url: input.toolUrl, name, category: input.category ?? "Ops script", kind });
-              [tool] = await tx.select().from(tools).where(eq(tools.url, input.toolUrl));
-            }
-
-            const status: ClaimStatus = input.action === "unclaim" ? "withdrawn" : input.pending ? "pending" : "active";
-            const [existing] = await tx
-              .select()
-              .from(claims)
-              .where(and(eq(claims.toolId, tool.id), eq(claims.identity, input.identity)))
-              .for("update");
-
-            if (mergeClaim(existing ?? null, { status, signedDate: input.signedDate }) === "keep") return toClaim(existing);
-
-            if (status === "pending" && existing?.status !== "pending") {
-              const [pending] = await tx.select({ n: count() }).from(claims).where(and(eq(claims.identity, input.identity), eq(claims.status, "pending")));
-              if (pending.n >= MAX_PENDING_PER_IDENTITY) throw new PendingLimitError();
-            }
-
-            const values = { cluster: input.cluster, message: input.message, signature: input.signature, signedDate: input.signedDate, status, verifiedAt: new Date(), lastCheckedAt: null };
-            if (existing) await tx.update(claims).set(values).where(eq(claims.id, existing.id));
-            else await tx.insert(claims).values({ toolId: tool.id, identity: input.identity, ...values });
-            const [row] = await tx.select().from(claims).where(and(eq(claims.toolId, tool.id), eq(claims.identity, input.identity)));
-            return toClaim(row);
-          });
+          return await db.transaction((tx) => saveInTx(tx, input));
         } catch (err) {
-          // Two requests created the same tool or claim at once, or the database picked a deadlock victim: retry once.
-          if (attempt === 0 && isRetryable(err)) continue;
+          if (attempt < MAX_ATTEMPTS - 1 && isRetryable(err)) {
+            await sleep(20 * 2 ** attempt + Math.random() * 40);
+            continue;
+          }
           throw err;
         }
       }

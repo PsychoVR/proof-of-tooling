@@ -3,6 +3,7 @@ import { checkProofFile, proofFileUrl, registrableDomain } from "@/lib/claims";
 import { MAX_PROOF_BYTES } from "@/lib/claims/proof";
 
 const ID = "GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB";
+const noTxt = async (): Promise<string[][]> => [];
 const ok = (body: unknown, status = 200) => vi.fn(async () => ({ status, body: typeof body === "string" ? body : JSON.stringify(body) }));
 
 describe("proofFileUrl", () => {
@@ -57,13 +58,13 @@ describe("proofFileUrl", () => {
 describe("checkProofFile", () => {
   it("passes when the identity is listed (several identities allowed)", async () => {
     const f = ok({ identities: ["x", ID] });
-    expect(await checkProofFile("github.com/org/repo", ID, f)).toEqual({ id: "proof", ok: true });
+    expect(await checkProofFile("github.com/org/repo", ID, f, noTxt)).toEqual({ id: "proof", ok: true, via: "repo" });
     expect(f).toHaveBeenCalledWith("https://raw.githubusercontent.com/org/repo/HEAD/.proof-of-tooling.json");
   });
 
   it("fails for unsupported URLs without fetching", async () => {
     const f = ok({});
-    const r = await checkProofFile("localhost", ID, f);
+    const r = await checkProofFile("localhost", ID, f, noTxt);
     expect(r.ok).toBe(false);
     expect(f).not.toHaveBeenCalled();
   });
@@ -71,29 +72,30 @@ describe("checkProofFile", () => {
   it("fails when the fetcher throws", async () => {
     const r = await checkProofFile("a.io", ID, async () => {
       throw new Error("boom");
-    });
-    expect(r).toMatchObject({ ok: false, detail: "Could not fetch the proof file." });
+    }, noTxt);
+    expect(r.ok).toBe(false);
+    expect(r.detail).toMatch(/^Could not fetch the proof file. Not found:/);
   });
 
   it("fails on non-200", async () => {
-    expect((await checkProofFile("a.io", ID, ok("", 404))).detail).toContain("404");
+    expect((await checkProofFile("a.io", ID, ok("", 404), noTxt)).detail).toContain("404");
   });
 
   it("fails on oversized files", async () => {
-    const r = await checkProofFile("a.io", ID, ok(" ".repeat(MAX_PROOF_BYTES + 1)));
+    const r = await checkProofFile("a.io", ID, ok(" ".repeat(MAX_PROOF_BYTES + 1)), noTxt);
     expect(r.detail).toContain("too large");
   });
 
   it("fails on invalid JSON", async () => {
-    expect((await checkProofFile("a.io", ID, ok("{nope"))).detail).toContain("not valid JSON");
+    expect((await checkProofFile("a.io", ID, ok("{nope"), noTxt)).detail).toContain("not valid JSON");
   });
 
   it.each([["null", "null"], ["no array", '{"identities":"x"}'], ["missing", "{}"]])("fails on bad shape (%s)", async (_n, body) => {
-    expect((await checkProofFile("a.io", ID, ok(body))).detail).toContain("identities");
+    expect((await checkProofFile("a.io", ID, ok(body), noTxt)).detail).toContain("identities");
   });
 
   it("fails when the identity is absent", async () => {
-    expect((await checkProofFile("a.io", ID, ok({ identities: ["other"] }))).detail).toContain("not listed");
+    expect((await checkProofFile("a.io", ID, ok({ identities: ["other"] }), noTxt)).detail).toContain("not listed");
   });
 });
 

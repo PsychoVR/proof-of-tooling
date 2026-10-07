@@ -14,6 +14,13 @@ describe("isPrivateIp", () => {
     "blocks %s",
     (ip) => expect(isPrivateIp(ip)).toBe(true),
   );
+  it.each(["::ffff:0:1.2.3.4", "::ffff:0:808:808", "2001::1", "2001:0:4136:e378:8000:63bf:3fff:fdd2", "100::1", "100::ffff", "3fff::1", "3fff:fff:1::1"])(
+    "blocks translated, Teredo, discard-only and documentation ranges: %s",
+    (ip) => expect(isPrivateIp(ip)).toBe(true),
+  );
+  it.each(["2001:1::1", "2001:4860:4860::8888", "100:0:0:1::1", "3ffe::1", "3fff:1000::1", "4000::1", "::ffff:8.8.8.8"])("still allows %s", (ip) =>
+    expect(isPrivateIp(ip)).toBe(false),
+  );
   it.each(["8.8.8.8", "140.82.112.3", "172.32.0.1", "2606:4700:4700::1111"])("allows %s", (ip) =>
     expect(isPrivateIp(ip)).toBe(false),
   );

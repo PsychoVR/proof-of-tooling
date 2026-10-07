@@ -60,15 +60,49 @@ export function proofJson(identity: string): string {
   return JSON.stringify({ identities: [identity.trim()] }, null, 2) + "\n";
 }
 
+/** Value of the DNS TXT record that proves ownership of a host. */
+export function dnsTxtValue(identity: string): string {
+  return `proof-of-tooling=${identity.trim()}`;
+}
+
+/** Meta tag that proves ownership when placed inside the <head> of the home page. */
+export function metaTag(identity: string): string {
+  return `<meta name="proof-of-tooling" content="${identity.trim()}">`;
+}
+
+export type WebMethod = "file" | "dns" | "meta";
+export const WEB_METHODS: { id: WebMethod; label: string }[] = [
+  { id: "file", label: "File" },
+  { id: "dns", label: "DNS TXT" },
+  { id: "meta", label: "Meta tag" },
+];
+
+/** Index of the tab to focus after a key press in a tablist, or null for keys that do nothing. */
+export function nextTabIndex(current: number, key: string, count: number): number | null {
+  if (key === "ArrowRight" || key === "ArrowDown") return (current + 1) % count;
+  if (key === "ArrowLeft" || key === "ArrowUp") return (current - 1 + count) % count;
+  if (key === "Home") return 0;
+  if (key === "End") return count - 1;
+  return null;
+}
+
 export type ProofTarget =
-  | { kind: "repo"; owner: string; repo: string; where: string }
+  | { kind: "repo"; owner: string; repo: string; where: string; accountRepos: [string, string] }
   | { kind: "web"; host: string; where: string };
 
 /** Where the proof file must live for a canonical tool URL (what the server will fetch). */
 export function proofTarget(toolUrl: string): ProofTarget | null {
   const n = normalizeToolUrl(toolUrl);
   const gh = GH_REPO.exec(n);
-  if (gh) return { kind: "repo", owner: gh[1], repo: gh[2], where: `${n}/${PROOF_FILE_NAME}` + " (root of the default branch)" };
+  if (gh) {
+    return {
+      kind: "repo",
+      owner: gh[1],
+      repo: gh[2],
+      where: `${n}/${PROOF_FILE_NAME}` + " (root of the default branch)",
+      accountRepos: [`github.com/${gh[1]}/.github`, `github.com/${gh[1]}/${gh[1]}`],
+    };
+  }
   const host = n.split("/")[0];
   if (!host.includes(".") || host === "github.com") return null;
   return { kind: "web", host, where: `https://${host}/.well-known/proof-of-tooling.json` };
@@ -81,9 +115,17 @@ export function githubNewFileUrl(owner: string, repo: string, branch: string, id
 }
 
 /** Turns a failed proof check into a message that says which file is missing and where. */
-export function proofHint(toolUrl: string): string | null {
+export function proofHint(toolUrl: string, identity = "<identity>"): string | null {
   const t = proofTarget(toolUrl);
-  return t ? `Expected file: ${t.where}` : null;
+  if (!t) return null;
+  if (t.kind === "repo") {
+    const [a, b] = t.accountRepos;
+    return `Expected file: ${t.where}, or the same file in ${a} or ${b} (covers all your repos; claims proved this way are reviewed manually).`;
+  }
+  return (
+    `Expected one of: ${t.where}; a DNS TXT record ${dnsTxtValue(identity)} on ${t.host}; ` +
+    `or ${metaTag(identity)} in the <head> of https://${t.host}/.`
+  );
 }
 
 export function signCommand(message: string): string {
@@ -149,7 +191,7 @@ export const CHECK_LABELS: Record<ClaimCheckResult["id"], string> = {
   signature: "Signature matches the message and identity",
   status: "Claim is not blocked by an earlier decision",
   validator: "Identity has a live vote account",
-  proof: "Proof file lists this identity",
+  proof: "Ownership proof lists this identity",
   repo: "Repo is public and original",
   rules: "Passes the anti-abuse rules",
 };

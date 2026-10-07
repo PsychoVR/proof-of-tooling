@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
+import { Big_Shoulders, Hanken_Grotesk, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
@@ -8,17 +10,16 @@ export const metadata: Metadata = {
   description: "A tool that counts the tools validators build. Including this one.",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+// Self-hosted at build time: no request to Google at runtime, so the CSP needs no external font origins.
+const display = Big_Shoulders({ subsets: ["latin"], weight: ["600", "800"], variable: "--ff-display", display: "swap" });
+const body = Hanken_Grotesk({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--ff-body", display: "swap" });
+const mono = JetBrains_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--ff-mono", display: "swap" });
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Render every page per request so the CSP nonce set in proxy.ts can be applied to Next's scripts.
+  await connection();
   return (
-    <html lang="en">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link
-          rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
-        />
-      </head>
+    <html lang="en" className={`${display.variable} ${body.variable} ${mono.variable}`}>
       <body>
         <a className="skip" href="#main">
           Skip to content

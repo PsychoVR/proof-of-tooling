@@ -9,7 +9,7 @@ export async function jsonGet<T>(fn: () => Promise<T | null>, notFound = "not fo
     if (data === null) return NextResponse.json({ error: notFound }, { status: 404 });
     return NextResponse.json(data, { headers: CACHE_HEADERS });
   } catch (err) {
-    console.error("api error", err instanceof Error ? err.message : err);
+    console.error("api error:", err instanceof Error ? err.message : "unknown error");
     return NextResponse.json({ error: "internal error" }, { status: 500 });
   }
 }

@@ -9,3 +9,6 @@ next-env.d.ts
 /test-results/
 .next-e2e
 /playwright-report/
+
+# test coverage
+/coverage

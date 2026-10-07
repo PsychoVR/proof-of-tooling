@@ -59,7 +59,7 @@ test("wizard: valid CLI signature verifies and registers end to end", async ({ p
   await expect(page.locator("tbody tr", { hasText: "SunshineVR" })).toContainText("Signed");
   const reg = await (await page.request.get("/registry.json")).json();
   const entry = reg.entries.find((e: { message: string }) => e.message === valid.message);
-  expect(entry).toMatchObject({ identity: fixture.identity, cluster: "testnet", signature: valid.signature, status: "active" });
+  expect(entry).toMatchObject({ identity: fixture.identity, cluster: "mainnet", signature: valid.signature, status: "active" });
   expect(entry.tool.category).toBe("Meta");
   // Anyone can re-verify the published registry without trusting the server.
   for (const e of reg.entries as { message: string; signature: string; identity: string }[]) {

@@ -1,6 +1,7 @@
 import { and, count, eq, gte, ne } from "drizzle-orm";
 import { getDb } from "@/db";
 import { claims, tools, validators } from "@/db/schema";
+import { ENABLED_CLUSTERS } from "@/lib/clusters";
 import { getEnv } from "@/lib/env";
 import { safeFetcher } from "@/lib/safe-fetch";
 import type { Fetcher, RepoMetadata } from "@/lib/claims";
@@ -83,7 +84,7 @@ export function createClaimsDeps(): ClaimsDeps {
 
     async findValidatorCluster(identity) {
       const rows = await getDb().select({ cluster: validators.cluster }).from(validators).where(eq(validators.identity, identity));
-      const clusters = rows.map((r) => r.cluster as Cluster);
+      const clusters = rows.map((r) => r.cluster as Cluster).filter((c) => ENABLED_CLUSTERS.includes(c));
       return clusters.includes("mainnet") ? "mainnet" : (clusters[0] ?? null);
     },
 

@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { CATEGORIES, CLUSTERS, type Category, type Cluster, type LeaderboardRow } from "@/lib/types";
+import { ENABLED_CLUSTERS, MULTI_CLUSTER } from "@/lib/clusters";
+import { CATEGORIES, type Category, type Cluster, type LeaderboardRow } from "@/lib/types";
 import { CLUSTER_LABEL, displayName, safeHttpUrl, shortKey } from "@/lib/ui/format";
 import { Avatar } from "./Avatar";
 import { StatusPill } from "./StatusPill";
@@ -62,12 +63,14 @@ export function Leaderboard({ rows }: { rows: LeaderboardRow[] }) {
           </p>
         </div>
         <div className="filters">
+          {MULTI_CLUSTER && (
           <Seg
             label="Filter by cluster"
             value={cluster}
             onChange={setCluster}
-            options={[{ value: "all", label: "All clusters" }, ...CLUSTERS.map((c) => ({ value: c, label: CLUSTER_LABEL[c] }))]}
+            options={[{ value: "all", label: "All clusters" }, ...ENABLED_CLUSTERS.map((c) => ({ value: c, label: CLUSTER_LABEL[c] }))]}
           />
+          )}
           <Seg
             label="Filter by status"
             value={status}
@@ -105,22 +108,22 @@ export function Leaderboard({ rows }: { rows: LeaderboardRow[] }) {
         {visible.length} {visible.length === 1 ? "validator" : "validators"} shown
       </p>
       <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th scope="col">#</th>
-              <th scope="col">Validator</th>
-              <th scope="col">Tools</th>
-              <th scope="col" style={{ textAlign: "right" }}>
+        <table className="ledger" role="table">
+          <thead role="rowgroup">
+            <tr role="row">
+              <th scope="col" role="columnheader">#</th>
+              <th scope="col" role="columnheader">Validator</th>
+              <th scope="col" role="columnheader">Tools</th>
+              <th scope="col" role="columnheader" style={{ textAlign: "right" }}>
                 Count
               </th>
-              <th scope="col">Status</th>
+              <th scope="col" role="columnheader">Status</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody role="rowgroup">
             {visible.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="empty">
+              <tr role="row">
+                <td role="cell" colSpan={5} className="empty">
                   No validators match those filters.
                 </td>
               </tr>
@@ -129,9 +132,9 @@ export function Leaderboard({ rows }: { rows: LeaderboardRow[] }) {
                 const name = displayName(r.validator);
                 const site = safeHttpUrl(r.validator.website);
                 return (
-                  <tr key={`${r.validator.cluster}:${r.validator.identity}`}>
-                    <td className="rank">{i + 1}</td>
-                    <td>
+                  <tr role="row" key={`${r.validator.cluster}:${r.validator.identity}`}>
+                    <td role="cell" className="rank">{i + 1}</td>
+                    <td role="cell" className="c-validator">
                       <div className="vcell">
                         <Avatar name={name} iconUrl={r.validator.iconUrl} />
                         <div>
@@ -139,13 +142,17 @@ export function Leaderboard({ rows }: { rows: LeaderboardRow[] }) {
                             <Link href={`/v/${encodeURIComponent(r.validator.identity)}`}>{name}</Link>
                           </div>
                           <div className="vsub">
-                            {site ? new URL(site).host : shortKey(r.validator.identity)} ·{" "}
-                            <span className="cluster-tag">{CLUSTER_LABEL[r.validator.cluster]}</span>
+                            {site ? new URL(site).host : shortKey(r.validator.identity)}
+                            {MULTI_CLUSTER && (
+                              <>
+                                {" "}· <span className="cluster-tag">{CLUSTER_LABEL[r.validator.cluster]}</span>
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
                     </td>
-                    <td>
+                    <td role="cell" className="c-tools">
                       <div className="tools">
                         {r.tools.length === 0 ? (
                           <span className="vsub">No tools yet</span>
@@ -154,8 +161,8 @@ export function Leaderboard({ rows }: { rows: LeaderboardRow[] }) {
                         )}
                       </div>
                     </td>
-                    <td className="count">{r.toolCount}</td>
-                    <td>
+                    <td role="cell" className="count" aria-label={`${r.toolCount} tools`}>{r.toolCount}</td>
+                    <td role="cell" className="c-status">
                       <StatusPill status={rowStatus(r)} />
                     </td>
                   </tr>

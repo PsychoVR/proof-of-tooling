@@ -18,7 +18,14 @@ const val = (identity: string): Validator => ({
 });
 
 describe("runIngest", () => {
-  it("saves healthy clusters even if one fails", async () => {
+  it("ingests only the enabled clusters by default (mainnet in phase 1)", async () => {
+    const fetchValidators = vi.fn(async () => [val("a")]);
+    const report = await runIngest({ fetchValidators, upsert: async () => {} });
+    expect(report.map((r) => r.cluster)).toEqual(["mainnet"]);
+    expect(fetchValidators).toHaveBeenCalledTimes(1);
+  });
+
+  it("saves healthy clusters even if one fails (multi-cluster configuration)", async () => {
     const upsert = vi.fn(async () => {});
     const report = await runIngest({
       fetchValidators: async (c) => {
@@ -27,6 +34,7 @@ describe("runIngest", () => {
         return [val("a"), val("b")];
       },
       upsert,
+      clusters: ["mainnet", "testnet", "alpenglow"],
     });
     const by = Object.fromEntries(report.map((r) => [r.cluster, r]));
     expect(by.mainnet).toMatchObject({ ok: true, count: 2 });

@@ -6,6 +6,7 @@ import { CodeBlock } from "@/components/CodeBlock";
 import { StatusPill } from "@/components/StatusPill";
 import { ToolChip } from "@/components/ToolChip";
 import { getValidatorProfile } from "@/lib/queries";
+import { MULTI_CLUSTER } from "@/lib/clusters";
 import { CLUSTER_LABEL, displayName, formatDate, formatStake, safeHttpUrl, toolPillStatus } from "@/lib/ui/format";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +35,7 @@ export default async function ValidatorPage({ params }: Props) {
         <Avatar name={name} iconUrl={v.iconUrl} large />
         <div>
           <h1 className="page-title" style={{ marginTop: 0 }}>{name}</h1>
-          <span className="cluster-tag">{CLUSTER_LABEL[v.cluster]}</span>{" "}
+          {MULTI_CLUSTER && <span className="cluster-tag">{CLUSTER_LABEL[v.cluster]}</span>}{" "}
           {v.delinquent && <span className="status withdrawn">Delinquent</span>}
         </div>
       </div>

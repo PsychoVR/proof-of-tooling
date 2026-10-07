@@ -1,25 +1,10 @@
-import { getEnv } from "@/lib/env";
+import { clusterRpcUrl } from "@/lib/clusters";
 import type { Cluster, Validator } from "@/lib/types";
 
 export const CONFIG_PROGRAM = "Config1111111111111111111111111111111111111";
 export const VALIDATOR_INFO_KEY = "Va1idator1nfo111111111111111111111111111111";
 
-const DEFAULT_RPC: Partial<Record<Cluster, string>> = {
-  mainnet: "https://api.mainnet-beta.solana.com",
-  testnet: "https://api.testnet.solana.com",
-};
-
-export function rpcUrlFor(cluster: Cluster): string {
-  const env = getEnv();
-  const url =
-    cluster === "mainnet"
-      ? (env.HELIUS_RPC_URL ?? DEFAULT_RPC.mainnet)
-      : cluster === "testnet"
-        ? (env.RPC_TESTNET_URL ?? DEFAULT_RPC.testnet)
-        : env.RPC_ALPENGLOW_URL;
-  if (!url) throw new Error(`No RPC URL configured for cluster ${cluster}`);
-  return url;
-}
+export const rpcUrlFor = (cluster: Cluster): string => clusterRpcUrl(cluster);
 
 // ---- untrusted input sanitizers (validator-info is free text written by anyone) ----
 

@@ -37,11 +37,13 @@ test.describe("home and leaderboard", () => {
     await expect(page.getByText("No validators match those filters.")).toBeVisible();
   });
 
-  test("filters by cluster", async ({ page }) => {
+  test("is scoped to Solana mainnet: no cluster filter or tags, pill says so", async ({ page }) => {
     await gotoHydrated(page, "/");
-    await page.getByRole("button", { name: "Testnet" }).click();
-    await expect(page.getByText("No validators match those filters.")).toBeVisible();
-    await page.getByRole("button", { name: "All clusters" }).click();
+    await expect(page.locator(".pill")).toContainText("Solana mainnet");
+    await expect(page.locator(".pill")).not.toContainText(/testnet|alpenglow/i);
+    await expect(page.getByRole("group", { name: "Filter by cluster" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /testnet|alpenglow/i })).toHaveCount(0);
+    await expect(page.locator(".cluster-tag")).toHaveCount(0);
     await expect(page.locator("tbody tr")).toHaveCount(5);
   });
 });
@@ -126,9 +128,60 @@ test.describe("public API", () => {
 });
 
 test("@mobile 375px layout has no horizontal page scroll", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 800 });
   for (const path of ["/", "/claim", "/registry", `/v/${V.overclock.identity}`, "/t/watchtower"]) {
     await page.goto(path);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow, `horizontal overflow on ${path}`).toBeLessThanOrEqual(0);
   }
+});
+
+test("@mobile ledger renders one card per validator at 375px, with no horizontal scroll anywhere", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 800 });
+  await gotoHydrated(page, "/");
+  const rows = page.locator("table.ledger tbody tr");
+  await expect(rows).toHaveCount(5);
+
+  // Neither the page nor the table container scrolls sideways, and the table fits the viewport.
+  const m = await page.evaluate(() => {
+    const wrap = document.querySelector(".table-wrap") as HTMLElement;
+    const table = document.querySelector("table.ledger") as HTMLElement;
+    return {
+      page: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      wrap: wrap.scrollWidth - wrap.clientWidth,
+      tableWidth: table.getBoundingClientRect().width,
+    };
+  });
+  expect(m.page).toBeLessThanOrEqual(0);
+  expect(m.wrap).toBeLessThanOrEqual(0);
+  expect(m.tableWidth).toBeLessThanOrEqual(375);
+
+  // Each card shows validator, a large count, the status pill and the tool chips, all inside the viewport.
+  const card = rows.nth(2); // Overclock: one signed tool
+  await expect(card.locator(".vname")).toHaveText("Overclock");
+  await expect(card.locator(".status")).toHaveText("✓ Signed");
+  await expect(card.locator(".tools .tool")).toHaveCount(1);
+  const fontSize = await card.locator("td.count").evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+  expect(fontSize).toBeGreaterThanOrEqual(30);
+  for (const sel of [".vname", "td.count", ".status", ".tools .tool"]) {
+    const box = await card.locator(sel).first().boundingBox();
+    expect(box, sel).not.toBeNull();
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width, `${sel} inside viewport`).toBeLessThanOrEqual(375);
+  }
+  // Cards stack vertically instead of sharing a row.
+  const ys = await rows.evaluateAll((els) => els.map((e) => e.getBoundingClientRect().top));
+  expect([...ys].sort((a, b) => a - b)).toEqual(ys);
+  expect(new Set(ys).size).toBe(5);
+
+  // The header row is visually hidden but still available to assistive technology.
+  await expect(page.getByRole("columnheader", { name: "Validator" })).toBeAttached();
+});
+
+test("ledger keeps the table layout above 640px", async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 800 });
+  await gotoHydrated(page, "/");
+  const display = await page.locator("table.ledger tbody tr").first().evaluate((el) => getComputedStyle(el).display);
+  expect(display).toBe("table-row");
+  await expect(page.getByRole("columnheader", { name: "Validator" })).toBeVisible();
 });

@@ -45,10 +45,10 @@ describe("GET api", () => {
 
   it("validators validates and forwards query", async () => {
     q.getLeaderboard.mockResolvedValue({ items: [], page: 2, pageSize: 10, total: 0 });
-    const ok = await validators.GET(new Request("http://x/api/v1/validators?cluster=testnet&page=2&pageSize=10"));
+    const ok = await validators.GET(new Request("http://x/api/v1/validators?cluster=mainnet&page=2&pageSize=10"));
     expect(ok.status).toBe(200);
-    expect(q.getLeaderboard).toHaveBeenCalledWith({ cluster: "testnet", page: 2, pageSize: 10 });
-    for (const bad of ["cluster=nope", "page=0", "pageSize=1000", "page=abc"]) {
+    expect(q.getLeaderboard).toHaveBeenCalledWith({ cluster: "mainnet", page: 2, pageSize: 10 });
+    for (const bad of ["cluster=nope", "cluster=testnet", "cluster=alpenglow", "page=0", "pageSize=1000", "page=abc"]) {
       expect((await validators.GET(new Request(`http://x/api/v1/validators?${bad}`))).status).toBe(400);
     }
   });

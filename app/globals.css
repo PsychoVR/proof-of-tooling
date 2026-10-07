@@ -209,6 +209,23 @@ footer.site b { color: var(--fg); }
   .dl { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   .dl dd { margin-bottom: 8px; }
 }
+/* Ledger as cards below 640px: no horizontal scrolling, one card per validator. */
+@media (max-width: 640px) {
+  .table-wrap:has(> table.ledger) { overflow: visible; border: 0; background: transparent; }
+  table.ledger { min-width: 0; display: block; }
+  table.ledger thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  table.ledger tbody { display: grid; gap: 12px; }
+  table.ledger tr { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "rank validator count" "status status status" "tools tools tools"; gap: 10px 12px; align-items: center; padding: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+  table.ledger td { display: block; padding: 0; border: 0; min-width: 0; }
+  table.ledger td.rank { grid-area: rank; width: auto; align-self: start; }
+  table.ledger td.c-validator { grid-area: validator; }
+  table.ledger td.count { grid-area: count; width: auto; font-size: 34px; line-height: 1; align-self: start; }
+  table.ledger td.c-status { grid-area: status; }
+  table.ledger td.c-tools { grid-area: tools; }
+  table.ledger td.empty { grid-column: 1 / -1; grid-area: auto; padding: 20px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+  table.ledger tr:has(td.empty) { display: block; padding: 0; border: 0; background: transparent; }
+  table.ledger .tool { white-space: normal; }
+}
 @media (prefers-reduced-motion: reduce) {
   .reel, .bar .fill { transition: none; }
   html { scroll-behavior: auto; }

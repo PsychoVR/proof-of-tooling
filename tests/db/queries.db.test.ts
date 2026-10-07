@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { validators as validatorsTable } from "@/db/schema";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { getDb } from "@/db";
 import { CLI_IDENTITY, DEV_VALIDATORS as V, resetDevDb, seedDevData } from "@/db/dev-data";
@@ -51,7 +52,7 @@ describe("getLeaderboard", () => {
     const names = (await getLeaderboard({})).items.map((r) => r.validator.name);
     expect(names).not.toContain("Quiet Validator");
     expect(names).not.toContain("SunshineVR");
-    expect((await getLeaderboard({ cluster: "testnet" })).total).toBe(0);
+    expect((await getLeaderboard({ cluster: "testnet" })).total).toBe(0); // not enabled in phase 1
     expect((await getLeaderboard({ cluster: "mainnet" })).total).toBe(5);
   });
 
@@ -91,8 +92,22 @@ describe("getValidatorProfile", () => {
     expect((await getValidatorProfile(V.pumpkin.identity))?.endorsements).toHaveLength(1);
   });
 
-  it("resolves the testnet identity used by the CLI fixtures", async () => {
-    expect((await getValidatorProfile(CLI_IDENTITY))?.validator.cluster).toBe("testnet");
+  it("resolves the identity used by the CLI fixtures as a mainnet validator", async () => {
+    expect((await getValidatorProfile(CLI_IDENTITY))?.validator.cluster).toBe("mainnet");
+  });
+
+  it("ignores validators of clusters that are not enabled", async () => {
+    const ghost = "G".repeat(44);
+    await getDb().insert(validatorsTable).values({ identity: ghost, cluster: "testnet", voteAccount: "H".repeat(44), name: "Pumpkin's Pool", activatedStake: BigInt(1) });
+    try {
+      expect(await getValidatorProfile(ghost)).toBeNull();
+      const lb = await getLeaderboard({});
+      expect(lb.total).toBe(5);
+      expect(lb.items.every((r) => r.validator.cluster === "mainnet")).toBe(true);
+      expect((await getStats()).validatorsTotal).toBe(7);
+    } finally {
+      await getDb().execute(sql`DELETE FROM validators WHERE identity = ${ghost}`);
+    }
   });
 });
 
@@ -115,6 +130,19 @@ describe("getRegistry", () => {
   it("lists active and stale claims only", async () => {
     const r = await getRegistry();
     expect(r.entries.map((e) => [e.tool.name, e.status]).sort()).toEqual([["Mithril", "active"], ["Stakewiz", "stale"]]);
+  });
+});
+
+describe("seedUnclaimed against MariaDB", () => {
+  it("is idempotent and leaves existing tools untouched", async () => {
+    const { seedUnclaimed } = await import("@/lib/seed");
+    // the dev data already contains every seed tool and entry
+    expect(await seedUnclaimed()).toEqual({ tools: 7, newTools: 0, newEntries: 0 });
+    await resetDevDb();
+    expect(await seedUnclaimed()).toEqual({ tools: 7, newTools: 7, newEntries: 7 });
+    expect(await seedUnclaimed()).toEqual({ tools: 7, newTools: 0, newEntries: 0 });
+    await resetDevDb();
+    await seedDevData();
   });
 });
 

@@ -2,11 +2,12 @@ import { z } from "zod";
 import { badRequest, jsonGet } from "@/lib/api";
 import { getLeaderboard } from "@/lib/queries";
 import { CLUSTERS } from "@/lib/types";
+import { isEnabledCluster } from "@/lib/clusters";
 
 export const dynamic = "force-dynamic";
 
 const query = z.object({
-  cluster: z.enum(CLUSTERS).optional(),
+  cluster: z.enum(CLUSTERS).refine(isEnabledCluster).optional(),
   page: z.coerce.number().int().min(1).max(10_000).optional(),
   pageSize: z.coerce.number().int().min(1).max(100).optional(),
 });

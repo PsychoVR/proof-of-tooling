@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { CLUSTER_SCOPE_LABEL } from "@/lib/clusters";
 
 const LINKS = [
   { href: "/", label: "Ledger" },
@@ -28,7 +29,7 @@ export function SiteHeader() {
         </Link>
         <span className="pill">
           <span className="dot" aria-hidden="true" />
-          Solana validators · mainnet · testnet · Alpenglow
+          {CLUSTER_SCOPE_LABEL}
         </span>
         <nav className="nav" aria-label="Sections">
           {LINKS.map((l) => (

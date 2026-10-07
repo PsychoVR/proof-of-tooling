@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { MULTI_CLUSTER } from "@/lib/clusters";
 import { getRegistry } from "@/lib/queries";
 import { shortKey } from "@/lib/ui/format";
 
@@ -62,7 +63,7 @@ export default async function RegistryPage() {
               <tr>
                 <th scope="col">Tool</th>
                 <th scope="col">Identity</th>
-                <th scope="col">Cluster</th>
+                {MULTI_CLUSTER && <th scope="col">Cluster</th>}
                 <th scope="col">Status</th>
               </tr>
             </thead>
@@ -74,7 +75,7 @@ export default async function RegistryPage() {
                   <tr key={`${e.identity}:${e.tool.url}`}>
                     <td>{e.tool.name} <span className="vsub">{e.tool.url}</span></td>
                     <td className="mono">{shortKey(e.identity, 8, 6)}</td>
-                    <td>{e.cluster}</td>
+                    {MULTI_CLUSTER && <td>{e.cluster}</td>}
                     <td className="mono">{e.status}</td>
                   </tr>
                 ))

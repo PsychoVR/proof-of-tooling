@@ -6,7 +6,8 @@ import { SEED_ADDED_BY, SEED_TOOLS } from "./seed-data";
 
 type Db = ReturnType<typeof getDb>;
 
-// Identity of the CLI fixtures in tests/fixtures/cli-signatures.json (a testnet key).
+// Identity that signed tests/fixtures/cli-signatures.json. It was generated on testnet; the fixtures only
+// provide signature bytes, so here it plays the part of a mainnet validator.
 export const CLI_IDENTITY = "21CzjGL6u9LircpHKpRH9myUuRD634ZYXaf1ncqQLhwh";
 
 export const DEV_VALIDATORS = {
@@ -42,7 +43,7 @@ export async function seedDevData(db: Db = getDb()) {
   for (const v of Object.values(DEV_VALIDATORS)) {
     await db.insert(validators).values({ identity: v.identity, cluster: "mainnet", voteAccount: v.vote, name: v.name, website: null, activatedStake: BigInt(v.stake), version: "3.0.0", delinquent: false });
   }
-  await db.insert(validators).values({ identity: CLI_IDENTITY, cluster: "testnet", voteAccount: "H6DuW2" + "1".repeat(38), name: "SunshineVR", website: "https://sunshinevr.io", activatedStake: BigInt("10000000000000"), version: "3.0.0", delinquent: false });
+  await db.insert(validators).values({ identity: CLI_IDENTITY, cluster: "mainnet", voteAccount: "H6DuW2" + "1".repeat(38), name: "SunshineVR", website: "https://sunshinevr.io", activatedStake: BigInt("10000000000000"), version: "3.0.0", delinquent: false });
 
   for (const s of SEED_TOOLS) {
     const kind = s.url.startsWith("github.com/") ? "repo" : "web";

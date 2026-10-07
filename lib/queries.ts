@@ -1,5 +1,6 @@
 import { and, desc, eq, inArray, max, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
+import { ENABLED_CLUSTERS, isEnabledCluster } from "@/lib/clusters";
 import { claims, endorsements, seedEntries, tools, validators } from "@/db/schema";
 import {
   buildLeaderboard,
@@ -53,7 +54,7 @@ export async function getStats(): Promise<Stats> {
     db.select({ id: tools.id, category: tools.category }).from(tools),
     db.select({ toolId: claims.toolId, identity: claims.identity }).from(claims).where(eq(claims.status, "active")),
     db.select({ toolId: seedEntries.toolId }).from(seedEntries),
-    db.select({ total: sql<number>`count(*)`, updatedAt: max(validators.updatedAt) }).from(validators),
+    db.select({ total: sql<number>`count(*)`, updatedAt: max(validators.updatedAt) }).from(validators).where(inArray(validators.cluster, [...ENABLED_CLUSTERS])),
   ]);
   // A tool counts when it is seeded or has an active claim; pending, stale-only and withdrawn ones do not.
   const counted = new Set([...activeClaims.map((c) => c.toolId), ...seedRows.map((s) => s.toolId)]);
@@ -68,6 +69,7 @@ export async function getLeaderboard(opts: {
 }): Promise<LeaderboardResponse> {
   const page = Math.max(1, Math.floor(opts.page ?? 1));
   const pageSize = Math.min(100, Math.max(1, Math.floor(opts.pageSize ?? 25)));
+  if (opts.cluster && !isEnabledCluster(opts.cluster)) return { items: [], page, pageSize, total: 0 };
   const db = getDb();
 
   const [liveClaims, seeds, toolRows] = await Promise.all([
@@ -90,7 +92,7 @@ export async function getLeaderboard(opts: {
   const validatorRows = await db
     .select()
     .from(validators)
-    .where(opts.cluster ? and(eq(validators.cluster, opts.cluster), match) : match)
+    .where(and(opts.cluster ? eq(validators.cluster, opts.cluster) : inArray(validators.cluster, [...ENABLED_CLUSTERS]), match))
     .orderBy(desc(validators.activatedStake));
 
   const { items, total } = buildLeaderboard(validatorRows, liveClaims, seeds, toolRows, page, pageSize);
@@ -99,7 +101,10 @@ export async function getLeaderboard(opts: {
 
 export async function getValidatorProfile(identity: string): Promise<ValidatorProfile | null> {
   const db = getDb();
-  const rows = await db.select().from(validators).where(eq(validators.identity, identity));
+  const rows = await db
+    .select()
+    .from(validators)
+    .where(and(eq(validators.identity, identity), inArray(validators.cluster, [...ENABLED_CLUSTERS])));
   if (rows.length === 0) return null;
   // One identity may exist on several clusters: prefer mainnet, then the largest stake.
   const best = [...rows].sort((a, b) => {

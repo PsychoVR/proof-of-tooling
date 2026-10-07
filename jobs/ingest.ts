@@ -2,7 +2,8 @@ import { sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { validators } from "@/db/schema";
 import { fetchValidators } from "@/lib/solana/validators";
-import { CLUSTERS, type Cluster, type Validator } from "@/lib/types";
+import { ENABLED_CLUSTERS } from "@/lib/clusters";
+import type { Cluster, Validator } from "@/lib/types";
 
 export interface IngestDeps {
   fetchValidators: (cluster: Cluster) => Promise<Validator[]>;
@@ -54,9 +55,9 @@ export async function upsertValidators(rows: Validator[]): Promise<void> {
 
 const defaults: IngestDeps = { fetchValidators: (c) => fetchValidators(c), upsert: upsertValidators };
 
-/** Refreshes validators for every cluster in parallel; one cluster failing never blocks the others. */
+/** Refreshes validators for every enabled cluster in parallel; one cluster failing never blocks the others. */
 export async function runIngest(deps: IngestDeps = defaults): Promise<ClusterReport[]> {
-  const clusters = deps.clusters ?? CLUSTERS;
+  const clusters = deps.clusters ?? ENABLED_CLUSTERS;
   return Promise.all(
     clusters.map(async (cluster): Promise<ClusterReport> => {
       const t0 = Date.now();

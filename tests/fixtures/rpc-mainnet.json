@@ -1,0 +1,83 @@
+{
+  "_note": "Hand-built from the documented jsonParsed shapes of getVoteAccounts, getClusterNodes and getProgramAccounts(Config). Identities are fake. Stake values are written as raw numbers/strings the way the RPC emits them; one exceeds 2^53 on purpose.",
+  "getVoteAccountsRaw": "{\"jsonrpc\":\"2.0\",\"result\":{\"current\":[{\"votePubkey\":\"VoteAAAA11111111111111111111111111111111111\",\"nodePubkey\":\"IdentAAAA11111111111111111111111111111111111\",\"activatedStake\":9007199254740993,\"commission\":5,\"lastVote\":1},{\"votePubkey\":\"VoteBBBB11111111111111111111111111111111111\",\"nodePubkey\":\"IdentBBBB11111111111111111111111111111111111\",\"activatedStake\":500000000000,\"commission\":0,\"lastVote\":1},{\"votePubkey\":\"VoteB2222211111111111111111111111111111111111\",\"nodePubkey\":\"IdentBBBB11111111111111111111111111111111111\",\"activatedStake\":900000000000,\"commission\":0,\"lastVote\":1}],\"delinquent\":[{\"votePubkey\":\"VoteCCCC11111111111111111111111111111111111\",\"nodePubkey\":\"IdentCCCC11111111111111111111111111111111111\",\"activatedStake\":42,\"commission\":10,\"lastVote\":0}]},\"id\":1}",
+  "clusterNodes": [
+    { "pubkey": "IdentAAAA11111111111111111111111111111111111", "version": "3.0.4" },
+    { "pubkey": "IdentBBBB11111111111111111111111111111111111", "version": null },
+    { "pubkey": "IdentCCCC11111111111111111111111111111111111", "version": "2.3.1‮" }
+  ],
+  "configAccounts": [
+    {
+      "pubkey": "InfoAcct111",
+      "account": {
+        "data": {
+          "program": "config",
+          "space": 576,
+          "parsed": {
+            "type": "validatorInfo",
+            "info": {
+              "keys": [
+                { "pubkey": "Va1idator1nfo111111111111111111111111111111", "signer": false },
+                { "pubkey": "IdentAAAA11111111111111111111111111111111111", "signer": true }
+              ],
+              "configData": {
+                "name": "  Alpha‮ Pool\u0000 ",
+                "website": "https://alpha.example.com/",
+                "iconUrl": "https://alpha.example.com/logo.png",
+                "details": "ignored",
+                "keybaseUsername": "alpha"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "pubkey": "InfoAcct222",
+      "account": {
+        "data": {
+          "program": "config",
+          "space": 576,
+          "parsed": {
+            "type": "validatorInfo",
+            "info": {
+              "keys": [
+                { "pubkey": "Va1idator1nfo111111111111111111111111111111", "signer": false },
+                { "pubkey": "IdentBBBB11111111111111111111111111111111111", "signer": true }
+              ],
+              "configData": {
+                "name": "Bravo",
+                "website": "javascript:alert(1)",
+                "iconUrl": "http://insecure.example.com/i.png"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "pubkey": "InfoSpoof",
+      "account": {
+        "data": {
+          "program": "config",
+          "space": 576,
+          "parsed": {
+            "type": "validatorInfo",
+            "info": {
+              "keys": [
+                { "pubkey": "Va1idator1nfo111111111111111111111111111111", "signer": false },
+                { "pubkey": "IdentCCCC11111111111111111111111111111111111", "signer": false }
+              ],
+              "configData": { "name": "Spoofed Charlie" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "pubkey": "StakeConfig",
+      "account": { "data": { "program": "config", "space": 10, "parsed": { "type": "stakeConfig", "info": { "slashPenalty": 12 } } } }
+    },
+    { "pubkey": "Binary", "account": { "data": ["AAAA", "base64"] } }
+  ]
+}

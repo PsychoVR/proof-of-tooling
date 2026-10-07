@@ -39,6 +39,10 @@ describe("static headers", () => {
   it("is applied to every route and the powered-by header is off", async () => {
     expect(nextConfig.poweredByHeader).toBe(false);
     const rules = await nextConfig.headers!();
-    expect(rules).toEqual([{ source: "/:path*", headers: STATIC_SECURITY_HEADERS }]);
+    expect(rules[0]).toEqual({ source: "/:path*", headers: STATIC_SECURITY_HEADERS });
+  });
+  it("marks every /api/admin response no-store", async () => {
+    const rules = await nextConfig.headers!();
+    expect(rules).toContainEqual({ source: "/api/admin/:path*", headers: [{ key: "Cache-Control", value: "no-store" }] });
   });
 });

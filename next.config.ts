@@ -9,7 +9,11 @@ const e2e = process.env.E2E_BUILD === "1";
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   async headers() {
-    return [{ source: "/:path*", headers: STATIC_SECURITY_HEADERS }];
+    return [
+      { source: "/:path*", headers: STATIC_SECURITY_HEADERS },
+      // Moderation responses carry claim data and must never be cached by a proxy or the browser.
+      { source: "/api/admin/:path*", headers: [{ key: "Cache-Control", value: "no-store" }] },
+    ];
   },
   distDir: e2e ? ".next-e2e" : ".next",
   webpack(config, { webpack }) {

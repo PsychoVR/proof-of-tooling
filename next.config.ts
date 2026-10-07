@@ -1,11 +1,16 @@
 import path from "node:path";
 import type { NextConfig } from "next";
+import { STATIC_SECURITY_HEADERS } from "./lib/security-headers";
 
 // The Playwright build (E2E_BUILD=1) gets its own output folder and swaps in the claim-verification
 // test double. A normal build never contains it: scripts/check-prod-bundle.mjs fails the build if it does.
 const e2e = process.env.E2E_BUILD === "1";
 
 const nextConfig: NextConfig = {
+  poweredByHeader: false,
+  async headers() {
+    return [{ source: "/:path*", headers: STATIC_SECURITY_HEADERS }];
+  },
   distDir: e2e ? ".next-e2e" : ".next",
   webpack(config, { webpack }) {
     if (e2e) {

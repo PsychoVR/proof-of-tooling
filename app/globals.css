@@ -6,9 +6,9 @@
   --fg: #16201d; --muted: #55625d; --accent: #b7790f; --accent-text: #805400; --accent-ink: #1a1204; --accent-soft: #f6e6c4;
   --ok: #17704a; --ok-soft: #dcf1e6; --warn: #7a5c0e; --warn-soft: #f4ecd2; --bad: #a82f24; --bad-soft: #f7dfdb;
   --digit-bg: #16201d; --digit-fg: #f6c35a;
-  --f-display: "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
-  --f-body: "Hanken Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --f-display: var(--ff-display), "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
+  --f-body: var(--ff-body), "Hanken Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: var(--ff-mono), "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {

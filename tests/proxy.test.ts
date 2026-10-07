@@ -26,7 +26,17 @@ describe("proxy: malformed percent-encoding is a client error, not a 500", () =>
     }
   });
 
-  it("only runs on the routes that decode dynamic segments", () => {
-    expect(config.matcher).toEqual(["/v/:path*", "/t/:path*", "/api/v1/:path*"]);
+  it("sets a CSP with a fresh nonce on pages, not on the API", () => {
+    const a = proxy(req("/claim")).headers.get("content-security-policy")!;
+    const b = proxy(req("/claim")).headers.get("content-security-policy")!;
+    const nonce = (v: string) => /'nonce-([^']+)'/.exec(v)![1];
+    expect(nonce(a)).not.toBe(nonce(b));
+    expect(proxy(req("/api/v1/stats")).headers.get("content-security-policy")).toBeNull();
+  });
+
+  it("runs on pages but skips static assets and prefetches", () => {
+    const [m] = config.matcher as { source: string; missing: { key: string }[] }[];
+    expect(m.source).toContain("_next/static");
+    expect(m.missing.map((x) => x.key)).toContain("next-router-prefetch");
   });
 });

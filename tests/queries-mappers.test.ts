@@ -41,6 +41,7 @@ const crow = (id: number, toolId: number, identity: string, status: ClaimRow["st
   id,
   toolId,
   identity,
+  failures: 0,
   cluster: "mainnet",
   message: "m",
   signature: "s",

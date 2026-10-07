@@ -75,10 +75,13 @@ export const claims = mysqlTable(
     status: mysqlEnum("status", CLAIM_STATUSES).notNull().default("active"),
     verifiedAt: timestamp("verified_at").defaultNow().notNull(),
     lastCheckedAt: timestamp("last_checked_at"),
+    /** Consecutive failed proof-file checks; reset by a successful one. */
+    failures: int("failures").notNull().default(0),
   },
   (t) => [
     uniqueIndex("claims_tool_identity_uq").on(t.toolId, t.identity),
     index("claims_identity_idx").on(t.identity),
+    index("claims_status_id_idx").on(t.status, t.id),
   ],
 );
 

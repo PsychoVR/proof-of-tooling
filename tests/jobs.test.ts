@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { healthFor, parseRepo, runGithub } from "@/jobs/github";
 import { runIngest } from "@/jobs/ingest";
-import { previousCheckFailed, runReverify, type ActiveClaim } from "@/jobs/reverify";
+import { checkReachable, ProofUnreachableError, runReverify, type ActiveClaim } from "@/jobs/reverify";
 import type { Validator } from "@/lib/types";
 
 const val = (identity: string): Validator => ({
@@ -45,41 +45,85 @@ describe("runIngest", () => {
 });
 
 describe("runReverify", () => {
-  const t0 = new Date("2026-10-01T00:00:00Z");
-  const t1 = new Date("2026-10-02T00:00:00Z");
-  const claim = (id: number, last: Date | null): ActiveClaim => ({
-    id,
-    toolUrl: `https://x.test/${id}`,
-    identity: "i",
-    verifiedAt: t0,
-    lastCheckedAt: last,
-  });
+  const claim = (id: number, failures = 0): ActiveClaim => ({ id, toolUrl: `https://x.test/${id}`, identity: "i", failures });
 
-  it("detects previous failures from timestamps", () => {
-    expect(previousCheckFailed(claim(1, null))).toBe(false);
-    expect(previousCheckFailed(claim(1, t0))).toBe(false);
-    expect(previousCheckFailed(claim(1, t1))).toBe(true);
-  });
-
-  it("marks ok, first failure, second failure and network errors", async () => {
+  it("marks ok, first failure, second failure and network errors; prunes orphans", async () => {
     const markOk = vi.fn(async () => {});
     const markFailed = vi.fn(async () => {});
     const markStale = vi.fn(async () => {});
+    const prune = vi.fn(async () => 2);
     const report = await runReverify({
-      listActive: async () => [claim(1, null), claim(2, null), claim(3, t1), claim(4, null)],
+      listActive: async () => [claim(1), claim(2), claim(3, 1), claim(4), claim(5, 1)],
       check: async (url) => {
-        if (url.endsWith("/4")) throw new Error("timeout");
+        if (url.endsWith("/4") || url.endsWith("/5")) throw new ProofUnreachableError("timeout");
         return { id: "proof", ok: url.endsWith("/1") };
       },
       markOk,
       markFailed,
       markStale,
+      prune,
       concurrency: 2,
     });
     expect(markOk).toHaveBeenCalledWith(1, expect.any(Date));
-    expect(markFailed).toHaveBeenCalledWith(2, expect.any(Date));
+    expect(markFailed).toHaveBeenCalledWith(2, expect.any(Date), 1);
     expect(markStale).toHaveBeenCalledWith(3, expect.any(Date));
-    expect(report).toEqual({ checked: 3, ok: 1, failedOnce: 1, staled: 1, skipped: 1 });
+    // network errors touch nothing: no failure recorded, no stale
+    expect(markFailed).toHaveBeenCalledTimes(1);
+    expect(markStale).toHaveBeenCalledTimes(1);
+    expect(report).toEqual({ checked: 3, ok: 1, failedOnce: 1, staled: 1, skipped: 2, pruned: 2 });
+  });
+
+  it("a claim that failed, was unreachable once and then failed again is stale only after 2 real failures", async () => {
+    const markFailed = vi.fn(async () => {});
+    const markStale = vi.fn(async () => {});
+    const deps = { listActive: async () => [], markOk: async () => {}, markFailed, markStale, prune: async () => 0 };
+    await runReverify({ ...deps, listActive: async () => [claim(1, 0)], check: async () => ({ id: "proof", ok: false }) });
+    expect(markFailed).toHaveBeenCalledWith(1, expect.any(Date), 1);
+    expect(markStale).not.toHaveBeenCalled();
+    await runReverify({ ...deps, listActive: async () => [claim(1, 1)], check: async () => ({ id: "proof", ok: false }) });
+    expect(markStale).toHaveBeenCalledWith(1, expect.any(Date));
+  });
+
+  it("a prune failure does not lose the report", async () => {
+    const report = await runReverify({
+      listActive: async () => [],
+      check: async () => ({ id: "proof", ok: true }),
+      markOk: async () => {},
+      markFailed: async () => {},
+      markStale: async () => {},
+      prune: async () => {
+        throw new Error("db");
+      },
+    });
+    expect(report.pruned).toBe(0);
+  });
+});
+
+describe("checkReachable (B6)", () => {
+  const body = JSON.stringify({ identities: ["i"] });
+  it("passes a real result through", async () => {
+    expect(await checkReachable("example.com", "i", async () => ({ status: 200, body }))).toMatchObject({ ok: true });
+    expect(await checkReachable("example.com", "i", async () => ({ status: 404, body: "" }))).toMatchObject({ ok: false });
+    expect(await checkReachable("example.com", "other", async () => ({ status: 200, body }))).toMatchObject({ ok: false });
+  });
+
+  it("tells a thrown fetch (network error) apart from a failed proof", async () => {
+    await expect(
+      checkReachable("example.com", "i", async () => {
+        throw new Error("ECONNRESET");
+      }),
+    ).rejects.toBeInstanceOf(ProofUnreachableError);
+  });
+});
+
+describe("checkReachable with several proof methods", () => {
+  it("is conclusive when one method proves ownership even if another fetch threw", async () => {
+    const meta = '<html><head><meta name="proof-of-tooling" content="i"></head></html>';
+    const fetcher = async (url: string) => {
+      if (url.includes(".well-known")) throw new Error("ECONNRESET");
+      return { status: 200, body: meta };
+    };
+    expect(await checkReachable("example.com", "i", fetcher, async () => [])).toMatchObject({ ok: true });
   });
 });
 

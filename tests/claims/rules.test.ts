@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_TOOLS_PER_DOMAIN, evaluateRepoRules, evaluateWebRules, type RepoMetadata, type RuleContext } from "@/lib/claims";
+import { MAX_ACTIVE_PER_IDENTITY, MAX_CLAIMS_PER_DOMAIN_TOTAL, MAX_TOOLS_PER_DOMAIN, MIN_FORK_OWN_COMMITS, evaluateRepoRules, evaluateWebRules, type RepoMetadata, type RuleContext } from "@/lib/claims";
 
 const NOW = new Date("2026-10-07T00:00:00Z");
 const repo: RepoMetadata = {
@@ -29,8 +29,16 @@ describe("evaluateRepoRules", () => {
     expect(out.reasons).toHaveLength(1);
   });
 
-  it("accepts a fork with its own commits", () => {
-    expect(evaluateRepoRules({ ...repo, isFork: true, ownCommits: 3 }, ctx).decision).toBe("accept");
+  it("forks need 5 own commits: 1-4 go to review, 5 are accepted (B11)", () => {
+    expect(MIN_FORK_OWN_COMMITS).toBe(5);
+    expect(evaluateRepoRules({ ...repo, isFork: true, ownCommits: 4 }, ctx).decision).toBe("review");
+    expect(evaluateRepoRules({ ...repo, isFork: true, ownCommits: 5 }, ctx).decision).toBe("accept");
+    expect(evaluateRepoRules({ ...repo, isFork: false, ownCommits: 0 }, ctx).decision).toBe("accept");
+  });
+
+  it("caps active claims per identity for repos too (N6)", () => {
+    expect(evaluateRepoRules(repo, { ...ctx, identityActiveClaims: MAX_ACTIVE_PER_IDENTITY - 1 }).decision).toBe("accept");
+    expect(evaluateRepoRules(repo, { ...ctx, identityActiveClaims: MAX_ACTIVE_PER_IDENTITY }).decision).toBe("review");
   });
 
   it("collects every reject reason, and reject wins over review", () => {
@@ -85,6 +93,18 @@ describe("evaluateWebRules", () => {
     const out = evaluateWebRules({ ...web, sameDomainClaims: MAX_TOOLS_PER_DOMAIN });
     expect(out.decision).toBe("review");
     expect(out.reasons.join(" ")).toContain("under this domain");
+  });
+
+  it("caps claims under one domain across all identities (N6)", () => {
+    expect(evaluateWebRules({ ...web, domainClaimsAllIdentities: MAX_CLAIMS_PER_DOMAIN_TOTAL - 1 }).decision).toBe("accept");
+    const out = evaluateWebRules({ ...web, domainClaimsAllIdentities: MAX_CLAIMS_PER_DOMAIN_TOTAL });
+    expect(out.decision).toBe("review");
+    expect(out.reasons.join(" ")).toContain("This domain");
+  });
+
+  it("caps active claims per identity (N6)", () => {
+    expect(evaluateWebRules({ ...web, identityActiveClaims: MAX_ACTIVE_PER_IDENTITY - 1 }).decision).toBe("accept");
+    expect(evaluateWebRules({ ...web, identityActiveClaims: MAX_ACTIVE_PER_IDENTITY }).decision).toBe("review");
   });
 
   it("collects several reasons and rejects a duplicate claim by the same identity", () => {

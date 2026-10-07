@@ -17,8 +17,26 @@ describe("getClientIp", () => {
   it("prefers the trusted header when it holds a valid IP, else falls back", () => {
     const cfg = { header: "x-real-ip", hops: 1 };
     expect(getClientIp(h({ "x-real-ip": "1.1.1.1", "x-forwarded-for": "2.2.2.2" }), cfg)).toBe("1.1.1.1");
-    expect(getClientIp(h({ "x-real-ip": "2001:db8::1" }), cfg)).toBe("2001:db8::1");
-    expect(getClientIp(h({ "x-real-ip": "garbage", "x-forwarded-for": "2.2.2.2" }), cfg)).toBe("2.2.2.2");
+  });
+  it("never falls back to X-Forwarded-For when a trusted header is configured (L1)", () => {
+    const cfg = { header: "x-real-ip", hops: 1 };
+    expect(getClientIp(h({ "x-real-ip": "garbage", "x-forwarded-for": "2.2.2.2" }), cfg)).toBeNull();
+    expect(getClientIp(h({ "x-forwarded-for": "2.2.2.2" }), cfg)).toBeNull();
+  });
+  it("collapses IPv6 addresses to their /64 (L3)", () => {
+    const cfg = { header: "x-real-ip", hops: 1 };
+    const ip = (v: string) => getClientIp(h({ "x-real-ip": v }), cfg);
+    expect(ip("2001:db8:1:2:aaaa:bbbb:cccc:dddd")).toBe("2001:db8:1:2::/64");
+    expect(ip("2001:db8:1:2::1")).toBe(ip("2001:0db8:0001:0002:ffff::9"));
+    expect(ip("2001:db8:1:3::1")).not.toBe(ip("2001:db8:1:2::1"));
+    expect(ip("2001:db8::1")).toBe("2001:db8:0:0::/64");
+    expect(ip("::1")).toBe("0:0:0:0::/64");
+    expect(ip("::")).toBe("0:0:0:0::/64");
+    expect(ip("1:2:3:4:5:6:7:8")).toBe("1:2:3:4::/64");
+    expect(ip("::ffff:1.2.3.4")).toBe("0:0:0:0::/64");
+    expect(ip("fe80::1%eth0")).toBe("fe80:0:0:0::/64");
+    expect(ip("1.2.3.4")).toBe("1.2.3.4");
+    expect(getClientIp(h({ "x-forwarded-for": "6.6.6.6, 2001:db8:5:6::7" }), { hops: 1 })).toBe("2001:db8:5:6::/64");
   });
   it("returns null without a usable header, with too few entries or with an invalid IP", () => {
     expect(getClientIp(h({}), { hops: 1 })).toBeNull();

@@ -58,6 +58,9 @@ export class ToolQuotaError extends Error {
   }
 }
 
+/** Why a claim proved only through an owner-wide file waits for a person. */
+export const ACCOUNT_PROOF_REASON = "Ownership proved by an account-level file.";
+
 const pendingLimitDetail = `This identity already has ${MAX_PENDING_PER_IDENTITY} claims waiting for review. Wait for a decision before sending more.`;
 
 /** Everything that touches the network or the database, injected so the flow is testable. */
@@ -185,7 +188,11 @@ export async function processClaim(
       checks.push({ id: checkId, ok: false, detail: outcome.reasons.join(" ") });
       return { ok: false, checks };
     }
-    inReview = outcome.decision === "review";
+    // Account-level files (`<owner>/.github`, `<owner>/<owner>`) are writable by anyone with access
+    // to those repos, and cover every repo of the owner, so they never auto-approve a claim.
+    const accountLevel = proof.via === "account";
+    inReview = outcome.decision === "review" || accountLevel;
+    if (accountLevel) outcome = { decision: "review", reasons: [...outcome.reasons, ACCOUNT_PROOF_REASON] };
     if (inReview && (history.pendingClaims ?? 0) >= MAX_PENDING_PER_IDENTITY) {
       checks.push({ id: "rules", ok: false, detail: pendingLimitDetail });
       return { ok: false, checks };

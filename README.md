@@ -16,7 +16,7 @@ Live at [tooling.sunshinevr.io](https://tooling.sunshinevr.io). Built by [Sunshi
    { "identities": ["<your validator identity pubkey>"] }
    ```
 
-   To cover all your repos at once, put the same file in `github.com/<owner>/.github` or in your profile repo `github.com/<owner>/<owner>`. Only the owner named in the claimed URL is consulted. The repo's own file is checked first.
+   To cover all your repos at once, put the same file in `github.com/<owner>/.github` or in your profile repo `github.com/<owner>/<owner>`. Only the owner named in the claimed URL is consulted. The repo's own file is checked first. Claims proved only by an account-level file are never approved automatically: they wait for a manual review.
 
    **Websites.** Any one of these is enough. Each is valid only for the exact host you claim (`tool.example.com` does not cover `example.com` or `other.example.com`), and bare shared suffixes such as `vercel.app` or `github.io` are not supported, while `you.vercel.app` is.
 

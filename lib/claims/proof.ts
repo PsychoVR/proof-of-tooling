@@ -1,6 +1,6 @@
 import { parse as parseHost } from "tldts";
 import { parse as parseHtml, type DefaultTreeAdapterMap } from "parse5";
-import type { ClaimCheckResult } from "@/lib/types";
+import type { ClaimCheckResult, ProofVia } from "@/lib/types";
 
 export interface FetchedFile {
   status: number;
@@ -76,6 +76,7 @@ export function accountProofUrls(toolUrl: string): string[] {
 }
 
 type Outcome = { ok: true } | { ok: false; detail: string };
+type RepoOutcome = { ok: true; via: "repo" | "account" } | { ok: false; detail: string };
 const fail = (detail: string): Outcome => ({ ok: false, detail });
 
 /** Fetches one proof JSON file and checks that it lists the identity. */
@@ -103,14 +104,14 @@ async function checkJsonFile(url: string, identity: string, fetcher: Fetcher): P
 const shown = (rawUrl: string) => rawUrl.replace("https://raw.githubusercontent.com/", "github.com/").replace("/HEAD/", "/");
 
 /** Repo file first, then the owner's two account-level locations. */
-async function checkRepo(toolUrl: string, repoUrl: string, identity: string, fetcher: Fetcher): Promise<Outcome> {
+async function checkRepo(toolUrl: string, repoUrl: string, identity: string, fetcher: Fetcher): Promise<RepoOutcome> {
   const first = await checkJsonFile(repoUrl, identity, fetcher);
-  if (first.ok) return first;
+  if (first.ok) return { ok: true, via: "repo" };
   // Skip a location that is the claimed repo itself (e.g. the claimed repo is `.github`).
   const others = accountProofUrls(toolUrl).filter((u) => u !== repoUrl);
   const results = await Promise.all(others.map((u) => checkJsonFile(u, identity, fetcher)));
-  if (results.some((r) => r.ok)) return { ok: true };
-  return fail(`${first.detail} Also tried ${others.map(shown).join(" and ")}.`);
+  if (results.some((r) => r.ok)) return { ok: true, via: "account" };
+  return { ok: false, detail: `${first.detail} Also tried ${others.map(shown).join(" and ")}.` };
 }
 
 /**
@@ -172,14 +173,14 @@ export async function checkProofFile(
 
   if (target.kind === "repo") {
     const r = await checkRepo(toolUrl, target.url, identity, fetcher);
-    return r.ok ? { id: "proof", ok: true } : { id: "proof", ok: false, detail: r.detail };
+    return r.ok ? { id: "proof", ok: true, via: r.via } : { id: "proof", ok: false, detail: r.detail };
   }
 
   const wellKnown = await checkJsonFile(target.url, identity, fetcher);
-  if (wellKnown.ok) return { id: "proof", ok: true };
+  if (wellKnown.ok) return { id: "proof", ok: true, via: "well-known" };
   const host = new URL(target.url).hostname;
   const [txt, meta] = await Promise.all([checkTxt(host, identity, resolveTxt), checkMeta(host, identity, fetcher)]);
-  if (txt || meta) return { id: "proof", ok: true };
+  if (txt || meta) return { id: "proof", ok: true, via: (txt ? "dns" : "meta") satisfies ProofVia };
   return {
     id: "proof",
     ok: false,

@@ -21,13 +21,13 @@ describe("repo proof (repo first, then the owner's account locations)", () => {
 
   it("accepts the repo file and does not look further", async () => {
     const f = router({ [repo]: json([ID]) });
-    expect(await checkProofFile("github.com/me/tool", ID, f, noTxt)).toEqual({ id: "proof", ok: true });
+    expect(await checkProofFile("github.com/me/tool", ID, f, noTxt)).toEqual({ id: "proof", ok: true, via: "repo" });
     expect(f.mock.calls.map((c) => c[0])).toEqual([repo]);
   });
 
   it("accepts the owner's .github repo", async () => {
     const f = router({ [dotGithub]: json([ID]) });
-    expect((await checkProofFile("github.com/me/tool", ID, f, noTxt)).ok).toBe(true);
+    expect(await checkProofFile("github.com/me/tool", ID, f, noTxt)).toEqual({ id: "proof", ok: true, via: "account" });
   });
 
   it("accepts the owner's profile repo", async () => {
@@ -37,7 +37,7 @@ describe("repo proof (repo first, then the owner's account locations)", () => {
 
   it("falls back when the repo file exists but does not list the identity", async () => {
     const f = router({ [repo]: json([OTHER]), [profile]: json([ID]) });
-    expect((await checkProofFile("github.com/me/tool", ID, f, noTxt)).ok).toBe(true);
+    expect((await checkProofFile("github.com/me/tool", ID, f, noTxt)).via).toBe("account");
   });
 
   it("only ever asks for the claimed owner's URLs", async () => {
@@ -89,14 +89,14 @@ describe("web proof", () => {
   it("accepts the well-known file without touching DNS or the home page", async () => {
     const f = router({ [wk]: json([ID]) });
     const dns = vi.fn(noTxt);
-    expect((await checkProofFile("tool.example.com/x", ID, f, dns)).ok).toBe(true);
+    expect((await checkProofFile("tool.example.com/x", ID, f, dns)).via).toBe("well-known");
     expect(dns).not.toHaveBeenCalled();
     expect(f).toHaveBeenCalledTimes(1);
   });
 
   it("accepts a TXT record on the exact host (chunks joined, trimmed)", async () => {
     const dns = vi.fn(async (_h: string) => [["v=spf1 -all"], ["proof-of-tooling=" + ID.slice(0, 10), ID.slice(10) + " "]]);
-    expect((await checkProofFile("tool.example.com/x", ID, router({}), dns)).ok).toBe(true);
+    expect((await checkProofFile("tool.example.com/x", ID, router({}), dns)).via).toBe("dns");
     expect(dns.mock.calls).toEqual([["tool.example.com"]]);
   });
 
@@ -122,7 +122,7 @@ describe("web proof", () => {
 
   it("accepts a meta tag in the head of the home page", async () => {
     const f = router({ [home]: page(`<title>x</title>${meta()}`) });
-    expect((await checkProofFile("tool.example.com/x", ID, f, noTxt)).ok).toBe(true);
+    expect((await checkProofFile("tool.example.com/x", ID, f, noTxt)).via).toBe("meta");
     expect(f).toHaveBeenCalledWith(home);
   });
 

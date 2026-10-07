@@ -120,7 +120,7 @@ export function proofHint(toolUrl: string, identity = "<identity>"): string | nu
   if (!t) return null;
   if (t.kind === "repo") {
     const [a, b] = t.accountRepos;
-    return `Expected file: ${t.where}, or the same file in ${a} or ${b} (covers all your repos).`;
+    return `Expected file: ${t.where}, or the same file in ${a} or ${b} (covers all your repos; claims proved this way are reviewed manually).`;
   }
   return (
     `Expected one of: ${t.where}; a DNS TXT record ${dnsTxtValue(identity)} on ${t.host}; ` +

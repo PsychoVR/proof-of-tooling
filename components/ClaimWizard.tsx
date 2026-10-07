@@ -155,7 +155,7 @@ export function ClaimWizard() {
                   </div>
                   <p className="note">
                     Own several tools? Put the same file in your <code>{target.accountRepos[0]}</code> or{" "}
-                    <code>{target.accountRepos[1]}</code> repo instead and it covers all your repos.
+                    <code>{target.accountRepos[1]}</code> repo instead and it covers all your repos; claims proved this way are reviewed manually.
                   </p>
                 </>
               ) : (

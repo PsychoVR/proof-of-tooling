@@ -58,7 +58,7 @@ describe("proofFileUrl", () => {
 describe("checkProofFile", () => {
   it("passes when the identity is listed (several identities allowed)", async () => {
     const f = ok({ identities: ["x", ID] });
-    expect(await checkProofFile("github.com/org/repo", ID, f, noTxt)).toEqual({ id: "proof", ok: true });
+    expect(await checkProofFile("github.com/org/repo", ID, f, noTxt)).toEqual({ id: "proof", ok: true, via: "repo" });
     expect(f).toHaveBeenCalledWith("https://raw.githubusercontent.com/org/repo/HEAD/.proof-of-tooling.json");
   });
 

@@ -28,6 +28,13 @@ function optional(raw: Record<string, string | undefined>, name: string, schema:
   return undefined;
 }
 
+/** Proxy settings used to find the client IP. Needs no database, so it never throws. */
+export function loadProxyConfig(raw: Record<string, string | undefined>): { header?: string; hops: number } {
+  const header = optional(raw, "TRUSTED_IP_HEADER", z.string().regex(/^[A-Za-z0-9-]{1,64}$/))?.toLowerCase();
+  const hops = optional(raw, "TRUSTED_PROXY_HOPS", z.string().regex(/^[1-9]\d?$/));
+  return { header, hops: hops ? Number(hops) : 1 };
+}
+
 export function loadEnv(raw: Record<string, string | undefined>): Env {
   return {
     DATABASE_URL: z.string().min(1).parse(clean(raw.DATABASE_URL)),

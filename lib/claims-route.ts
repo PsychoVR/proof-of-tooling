@@ -5,6 +5,8 @@ import { createClaimsDeps } from "@/lib/claims-deps";
 import { processClaim } from "@/lib/claims-service";
 import { createRateLimiter } from "@/lib/rate-limit";
 import { sanitizeText } from "@/lib/text";
+import { getClientIp } from "@/lib/client-ip";
+import { parseClaimMessage } from "@/lib/claims";
 
 const bodySchema = z.object({
   message: z.string().min(1).max(1300),
@@ -14,12 +16,17 @@ const bodySchema = z.object({
 });
 const MAX_BODY_BYTES = 4096;
 const allow = createRateLimiter(20, 60_000);
+// Requests whose client IP cannot be determined share one stricter bucket.
+const allowUnknown = createRateLimiter(5, 60_000);
+// Per claimed identity, so rotating IPs does not help against one validator.
+const allowWriteIdentity = createRateLimiter(10, 60_000);
+const allowCheckIdentity = createRateLimiter(30, 60_000);
+
+const tooMany = () => NextResponse.json({ error: "rate limited" }, { status: 429 });
 
 export async function handleClaimRequest(req: Request, persist: boolean) {
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? "unknown";
-  if (!allow(`${persist ? "w" : "c"}:${ip}`)) {
-    return NextResponse.json({ error: "rate limited" }, { status: 429 });
-  }
+  const ip = getClientIp(req.headers);
+  if (!(ip ? allow(`${persist ? "w" : "c"}:${ip}`) : allowUnknown(persist ? "w" : "c"))) return tooMany();
   if (Number(req.headers.get("content-length") ?? 0) > MAX_BODY_BYTES) {
     return NextResponse.json({ error: "payload too large" }, { status: 413 });
   }
@@ -31,6 +38,9 @@ export async function handleClaimRequest(req: Request, persist: boolean) {
   }
   const body = bodySchema.safeParse(json);
   if (!body.success) return NextResponse.json({ error: "invalid body" }, { status: 400 });
+  // Messages that do not parse are rejected by the pipeline and only count against the IP.
+  const identity = parseClaimMessage(body.data.message)?.identity;
+  if (identity && !(persist ? allowWriteIdentity : allowCheckIdentity)(identity)) return tooMany();
   let result;
   try {
     result = await processClaim(body.data, createClaimsDeps(), persist);

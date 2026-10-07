@@ -1,3 +1,4 @@
+import { normalizeToolUrl } from "@/lib/claims/message";
 import type { Category } from "@/lib/types";
 
 /** Unclaimed entries: public tools linked from each validator's own site. Not yet signed. */
@@ -17,7 +18,7 @@ const entry = (
   slug: string,
   category: Category,
   url: string,
-): SeedTool => ({ validatorName, sourceUrl: `https://${site}`, name, slug, category, url });
+): SeedTool => ({ validatorName, sourceUrl: `https://${site}`, name, slug, category, url: normalizeToolUrl(url) });
 
 export const SEED_TOOLS: SeedTool[] = [
   entry("Pumpkin's Pool", "pumpkinspool.com", "Watchtower", "watchtower", "Monitoring", "https://pumpkinspool.com/watchtower"),

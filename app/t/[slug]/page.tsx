@@ -2,23 +2,33 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { StatusPill } from "@/components/StatusPill";
-import { getTool } from "@/lib/ui/data";
+import { toolDisplayUrl } from "@/lib/claims/message";
+import { getToolBySlug } from "@/lib/queries";
+import type { ToolWithClaims } from "@/lib/types";
 import { formatDate, safeHttpUrl, shortKey } from "@/lib/ui/format";
+
+export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ slug: string }> };
 
+/** Validators tied to a tool: signed claimants first, otherwise the owner named by the seed entry. */
+function usersOf(tool: ToolWithClaims): { identity: string | null; name: string | null }[] {
+  if (tool.claimedBy.length > 0) return tool.claimedBy.map((c) => ({ identity: c.identity, name: c.name }));
+  return tool.owner ? [{ identity: tool.owner.identity, name: tool.owner.name }] : [];
+}
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const found = await getTool(decodeURIComponent(slug));
-  return { title: found ? found.tool.name : "Tool not found" };
+  const tool = await getToolBySlug(decodeURIComponent(slug));
+  return { title: tool ? tool.name : "Tool not found" };
 }
 
 export default async function ToolPage({ params }: Props) {
   const { slug } = await params;
-  const found = await getTool(decodeURIComponent(slug));
-  if (!found) notFound();
-  const { tool, users } = found;
-  const href = safeHttpUrl(tool.url);
+  const tool = await getToolBySlug(decodeURIComponent(slug));
+  if (!tool) notFound();
+  const users = usersOf(tool);
+  const href = safeHttpUrl(toolDisplayUrl(tool.url));
 
   return (
     <>
@@ -34,7 +44,7 @@ export default async function ToolPage({ params }: Props) {
           <h2 id="about-h" className="label" style={{ marginBottom: 12 }}>About</h2>
           <dl className="dl">
             <dt>Link</dt>
-            <dd>{href ? <a className="linkplain" href={href} target="_blank" rel="noopener noreferrer nofollow">{tool.url.replace(/^https?:\/\//, "")}</a> : tool.url}</dd>
+            <dd>{href ? <a className="linkplain" href={href} target="_blank" rel="noopener noreferrer nofollow">{tool.url}</a> : tool.url}</dd>
             <dt>Type</dt><dd>{tool.kind === "repo" ? "Repository" : "Website"}</dd>
             <dt>Original</dt><dd>{tool.isFork ? "Fork" : "Yes"}</dd>
             <dt>Added</dt><dd>{formatDate(tool.createdAt)}</dd>
@@ -58,10 +68,14 @@ export default async function ToolPage({ params }: Props) {
           ) : (
             <ul className="list">
               {users.map((u) => (
-                <li key={u.identity}>
-                  <Link className="linkplain" href={`/v/${encodeURIComponent(u.identity)}`}>
-                    {u.name?.trim() || shortKey(u.identity)}
-                  </Link>
+                <li key={u.identity ?? u.name}>
+                  {u.identity ? (
+                    <Link className="linkplain" href={`/v/${encodeURIComponent(u.identity)}`}>
+                      {u.name?.trim() || shortKey(u.identity)}
+                    </Link>
+                  ) : (
+                    <span>{u.name}</span>
+                  )}
                   <StatusPill status={tool.status} />
                 </li>
               ))}

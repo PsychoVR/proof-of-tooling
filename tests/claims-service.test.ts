@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import fixture from "./fixtures/cli-signatures.json";
 import { processClaim, type ClaimsDeps } from "@/lib/claims-service";
 import { createRateLimiter } from "@/lib/rate-limit";
 import type { Claim } from "@/lib/types";
@@ -73,9 +74,32 @@ describe("processClaim", () => {
     expect(review.checks.at(-1)?.detail).toContain("manual review");
   });
 
-  // These need a real signed fixture for a web URL / unclaim (not available yet).
-  it.todo("skips repo rules for web tools");
-  it.todo("withdraws on a valid unclaim and rejects an unclaim without an existing claim");
+  describe("unclaim with the real CLI fixture", () => {
+    const cli = fixture as { identity: string; cases: { name: string; message: string; signature: string }[] };
+    const un = cli.cases.find((c) => c.name === "valid-unclaim")!;
+    const unReq = { message: un.message, signature: un.signature };
+    const clock = () => new Date("2026-10-07T12:00:00Z");
+    const existing = { id: 7, status: "active" } as Claim;
+
+    it("withdraws when a claim exists, without needing the proof file", async () => {
+      const d = deps({
+        now: clock,
+        fetcher: async () => ({ status: 404, body: "" }),
+        getHistory: async () => ({ existing, identityClaimsLast24h: 0, otherClaimants: 0 }),
+      });
+      const r = await processClaim(unReq, d, true);
+      expect(r.ok).toBe(true);
+      expect(d.saveClaim).toHaveBeenCalledWith(expect.objectContaining({ action: "unclaim", identity: cli.identity }));
+    });
+
+    it("rejects an unclaim without an existing claim", async () => {
+      const d = deps({ now: clock });
+      const r = await processClaim(unReq, d, true);
+      expect(r.ok).toBe(false);
+      expect(r.checks.at(-1)).toMatchObject({ id: "proof", ok: false });
+      expect(d.saveClaim).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe("createRateLimiter", () => {

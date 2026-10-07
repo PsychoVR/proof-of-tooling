@@ -1,0 +1,24 @@
+{
+  "signedOn": "2026-10-07",
+  "identity": "21CzjGL6u9LircpHKpRH9myUuRD634ZYXaf1ncqQLhwh",
+  "cases": [
+    {
+      "name": "valid-claim",
+      "message": "proof-of-tooling v1 | claim | github.com/psychovr/proof-of-tooling | 21CzjGL6u9LircpHKpRH9myUuRD634ZYXaf1ncqQLhwh | 2026-10-07",
+      "signature": "4x3M2D73tKaBemNCSRJTtLjS3n7FnAgoFqsAM8xEjNC8ccP3KisFKdcxcc3eAc1Lo6JtLrjA1giVMDT9qFjf8QGv",
+      "expect": "valid"
+    },
+    {
+      "name": "stale-date",
+      "message": "proof-of-tooling v1 | claim | github.com/psychovr/proof-of-tooling | 21CzjGL6u9LircpHKpRH9myUuRD634ZYXaf1ncqQLhwh | 2026-09-07",
+      "signature": "3CLuNjASN1Tc177ypva8Zb6Fk44K6FhGB5jNjFPEEyka1HjgqXD7kieukkNkh7uda97fjbpNmnBHbSsoudxD4wfy",
+      "expect": "date-error"
+    },
+    {
+      "name": "valid-unclaim",
+      "message": "proof-of-tooling v1 | unclaim | github.com/psychovr/proof-of-tooling | 21CzjGL6u9LircpHKpRH9myUuRD634ZYXaf1ncqQLhwh | 2026-10-07",
+      "signature": "4xmxd7KoRuPxMZWxjwySF9J2NGH3edk33yjqtysgsvYgKNSG4B8tauDYntow1oH7hCnGawXGqqtrnzoJPAYCrv8C",
+      "expect": "valid"
+    }
+  ]
+}

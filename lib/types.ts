@@ -39,6 +39,7 @@ export interface Validator {
 export interface Tool {
   id: number;
   slug: string;
+  /** Canonical form from normalizeToolUrl: no scheme, no www., e.g. github.com/org/repo. */
   url: string;
   name: string;
   category: Category;
@@ -72,8 +73,16 @@ export interface Endorsement {
   createdAt: string;
 }
 
+/** Who builds or uses a tool. Seed entries carry only a name; claims add the identity. */
+export interface ToolOwner {
+  name: string;
+  identity: string | null;
+}
+
 export interface ToolWithClaims extends Tool {
   status: ToolStatus;
+  /** Owner from the seed entry (unclaimed) or from the claim (claimed). */
+  owner: ToolOwner | null;
   claims: Claim[];
   claimedBy: Pick<Validator, "identity" | "cluster" | "name">[];
 }
@@ -103,11 +112,18 @@ export interface Page<T> {
   total: number;
 }
 
+/** Per-tool state in a leaderboard row: a live signed claim, a seed entry or an expired claim. */
+export type LeaderboardToolStatus = "signed" | "unclaimed" | "stale";
+
+export interface LeaderboardTool extends Pick<Tool, "id" | "slug" | "name" | "category" | "url"> {
+  status: LeaderboardToolStatus;
+}
+
 export interface LeaderboardRow {
   validator: Validator;
   toolCount: number;
   claimedCount: number;
-  tools: Pick<Tool, "id" | "slug" | "name" | "category" | "url">[];
+  tools: LeaderboardTool[];
 }
 
 /** GET /api/v1/stats */
@@ -132,6 +148,10 @@ export interface ParsedClaimMessage {
 export interface ClaimRequest {
   message: string;
   signature: string;
+  /** Category chosen in the claim form; the server falls back to "Ops script" when missing. */
+  category?: Category;
+  /** Display name for a tool that is not yet in the database. */
+  toolName?: string;
 }
 
 export type ClaimCheckId =

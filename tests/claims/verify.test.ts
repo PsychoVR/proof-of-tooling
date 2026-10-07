@@ -1,6 +1,7 @@
 import nacl from "tweetnacl";
 import bs58 from "bs58";
 import { describe, expect, it, vi } from "vitest";
+import cli from "../fixtures/cli-signatures.json";
 import { serializeOffchainV0, verifyClaimSignature } from "@/lib/claims";
 
 // Known vector from the design prototype (DEMO constant).
@@ -96,9 +97,41 @@ describe("verifyClaimSignature", () => {
     }
   });
 
-  // Pending real fixtures from the CLI (docs/fixtures/cli-signatures.json does not exist yet).
-  it.todo("CLI fixture: valid-claim verifies with the clock fixed to signedOn");
-  it.todo("CLI fixture: stale-date yields a date error");
-  it.todo("CLI fixture: valid-unclaim verifies");
-  it.todo("a signature over the raw message bytes is rejected (needs a raw-signed fixture)");
+  describe("real CLI fixtures", () => {
+    const fx = cli as { signedOn: string; identity: string; cases: { name: string; message: string; signature: string; expect: string }[] };
+    const clock = new Date(`${fx.signedOn}T12:00:00Z`);
+    const byName = (n: string) => fx.cases.find((c) => c.name === n)!;
+    const run = (n: string) => verifyClaimSignature({ message: byName(n).message, signature: byName(n).signature, identity: fx.identity, now: clock });
+
+    it("valid-claim verifies with the clock fixed to signedOn", () => {
+      expect(run("valid-claim").ok).toBe(true);
+    });
+
+    it("stale-date yields a date error", () => {
+      const r = run("stale-date");
+      expect(r.ok).toBe(false);
+      expect(failed(r)).toBe("date");
+    });
+
+    it("valid-unclaim verifies", () => {
+      expect(run("valid-unclaim").ok).toBe(true);
+    });
+
+    it("rejects a CLI signature over the raw message bytes (only the off-chain envelope is accepted)", () => {
+      for (const n of ["valid-claim", "valid-unclaim"]) {
+        const c = byName(n);
+        const raw = new TextEncoder().encode(c.message);
+        const sig = bs58.decode(c.signature);
+        const pk = bs58.decode(fx.identity);
+        expect(nacl.sign.detached.verify(serializeOffchainV0(c.message), sig, pk)).toBe(true);
+        expect(nacl.sign.detached.verify(raw, sig, pk)).toBe(false);
+      }
+    });
+
+    it("a one-character change to a CLI-signed message is rejected", () => {
+      const c = byName("valid-claim");
+      const r = verifyClaimSignature({ message: c.message.replace("psychovr", "psychovq"), signature: c.signature, identity: fx.identity, now: clock });
+      expect(failed(r)).toBe("signature");
+    });
+  });
 });

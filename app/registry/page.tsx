@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getRegistry } from "@/lib/ui/data";
+import { getRegistry } from "@/lib/queries";
 import { shortKey } from "@/lib/ui/format";
 
 export const metadata: Metadata = { title: "Registry" };
+export const dynamic = "force-dynamic";
 
 export default async function RegistryPage() {
   const registry = await getRegistry();

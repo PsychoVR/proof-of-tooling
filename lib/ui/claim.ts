@@ -1,5 +1,6 @@
 // Claim wizard helpers: message building, input validation and the check client.
-import type { ClaimCheckResponse, ClaimCheckResult, ClaimRequest } from "@/lib/types";
+import { normalizeToolUrl } from "@/lib/claims/message";
+import type { ClaimCheckResponse, ClaimCheckResult, ClaimRequest, ClaimResponse } from "@/lib/types";
 
 const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
@@ -31,9 +32,7 @@ export function base58Length(s: string): number | null {
 /** Only characters that cannot break out of a double-quoted shell argument. */
 const SAFE_TOOL_URL = /^[A-Za-z0-9._~:/%@+-]+$/;
 
-export function normalizeToolUrl(input: string): string {
-  return input.trim().replace(/^https?:\/\//, "").replace(/\/+$/, "");
-}
+export { normalizeToolUrl };
 
 export function validateToolUrl(input: string): string | null {
   const n = normalizeToolUrl(input);
@@ -72,6 +71,21 @@ export function mockCheckClaim(req: ClaimRequest): ClaimCheckResponse {
     { id: "proof", ok: encodingOk, detail: "Simulated." },
   ];
   return { ok: checks.every((c) => c.ok), checks };
+}
+
+/** Records a verified claim (POST /api/v1/claims). Returns null when the service is unreachable. */
+export async function registerClaim(req: ClaimRequest): Promise<ClaimResponse | null> {
+  try {
+    const res = await fetch("/api/v1/claims", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(req),
+    });
+    const body = (await res.json()) as ClaimResponse;
+    return Array.isArray(body?.checks) ? body : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Calls the real endpoint and falls back to the mock when it does not exist yet (404 or network error). */

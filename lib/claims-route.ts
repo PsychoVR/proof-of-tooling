@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { CATEGORIES } from "@/lib/types";
 import { createClaimsDeps } from "@/lib/claims-deps";
 import { processClaim } from "@/lib/claims-service";
 import { createRateLimiter } from "@/lib/rate-limit";
 
-const bodySchema = z.object({ message: z.string().min(1).max(1300), signature: z.string().min(1).max(200) });
+const bodySchema = z.object({
+  message: z.string().min(1).max(1300),
+  signature: z.string().min(1).max(200),
+  category: z.enum(CATEGORIES).optional(),
+  toolName: z.string().trim().min(1).max(255).optional(),
+});
 const allow = createRateLimiter(20, 60_000);
 
 export async function handleClaimRequest(req: Request, persist: boolean) {

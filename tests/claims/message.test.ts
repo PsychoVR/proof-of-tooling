@@ -3,6 +3,7 @@ import {
   buildClaimMessage,
   isValidDate,
   normalizeToolUrl,
+  toolDisplayUrl,
   parseClaimMessage,
   serializeOffchainV0,
 } from "@/lib/claims";
@@ -15,6 +16,10 @@ describe("normalizeToolUrl", () => {
     expect(normalizeToolUrl("  HTTPS://GitHub.com/Org/Repo// ")).toBe("github.com/Org/Repo");
     expect(normalizeToolUrl("http://Example.COM/")).toBe("example.com");
     expect(normalizeToolUrl("example.com")).toBe("example.com");
+    expect(normalizeToolUrl("https://www.Example.com/")).toBe("example.com");
+    expect(normalizeToolUrl("github.com/Org/Repo.git/")).toBe("github.com/Org/Repo");
+    expect(normalizeToolUrl("https://example.com/tool?x=1#top")).toBe("example.com/tool");
+    expect(toolDisplayUrl("example.com")).toBe("https://example.com");
   });
 });
 

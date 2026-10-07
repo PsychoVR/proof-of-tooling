@@ -5,8 +5,10 @@ import { Avatar } from "@/components/Avatar";
 import { CodeBlock } from "@/components/CodeBlock";
 import { StatusPill } from "@/components/StatusPill";
 import { ToolChip } from "@/components/ToolChip";
-import { getValidatorProfile } from "@/lib/ui/data";
+import { getValidatorProfile } from "@/lib/queries";
 import { CLUSTER_LABEL, displayName, formatDate, formatStake, safeHttpUrl } from "@/lib/ui/format";
+
+export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ identity: string }> };
 
@@ -65,7 +67,10 @@ export default async function ValidatorPage({ params }: Props) {
       <section className="sec" aria-labelledby="tools-h">
         <div className="sec-head"><div><h2 id="tools-h">Tools</h2></div></div>
         {tools.length === 0 ? (
-          <div className="panel empty">No tools listed for this validator yet. <Link className="linkplain" href="/claim">Claim one</Link>.</div>
+          <div className="panel empty">
+            <p style={{ margin: "0 0 12px" }}>No tools listed for this validator yet.</p>
+            <Link className="btn primary" href="/claim">Claim your first tool</Link>
+          </div>
         ) : (
           <div className="panel">
             <ul className="list">
@@ -73,7 +78,7 @@ export default async function ValidatorPage({ params }: Props) {
                 <li key={t.id}>
                   <ToolChip tool={t} />
                   <StatusPill status={t.status} />
-                  <span className="vsub">{t.url.replace(/^https?:\/\//, "")}</span>
+                  <span className="vsub">{t.url}</span>
                 </li>
               ))}
             </ul>

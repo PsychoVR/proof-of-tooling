@@ -12,15 +12,26 @@ export function isPrintableAscii(s: string): boolean {
   return PRINTABLE_ASCII.test(s);
 }
 
-/** Strips scheme and trailing slashes, lowercases the host (the path keeps its case). */
+/**
+ * Canonical tool URL: no scheme, no `www.`, lowercase host, no query/hash,
+ * no trailing slash and no `.git` suffix (the path keeps its case).
+ */
 export function normalizeToolUrl(raw: string): string {
   const stripped = raw
     .trim()
     .replace(/^https?:\/\//i, "")
+    .replace(/[?#].*$/, "")
+    .replace(/\/+$/, "")
+    .replace(/\.git$/i, "")
     .replace(/\/+$/, "");
   const slash = stripped.indexOf("/");
-  if (slash === -1) return stripped.toLowerCase();
-  return stripped.slice(0, slash).toLowerCase() + stripped.slice(slash);
+  const host = (slash === -1 ? stripped : stripped.slice(0, slash)).toLowerCase().replace(/^www\./, "");
+  return slash === -1 ? host : host + stripped.slice(slash);
+}
+
+/** Adds the scheme for display and links; storage always uses the canonical form. */
+export function toolDisplayUrl(canonical: string): string {
+  return `https://${canonical}`;
 }
 
 export function isValidDate(s: string): boolean {

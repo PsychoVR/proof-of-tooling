@@ -7,7 +7,7 @@ import {
   type Fetcher,
   type RepoMetadata,
 } from "@/lib/claims";
-import type { Claim, ClaimCheckResult, ClaimRequest, ClaimResponse, Cluster } from "@/lib/types";
+import type { Category, Claim, ClaimCheckResult, ClaimRequest, ClaimResponse, Cluster } from "@/lib/types";
 
 export interface ClaimHistory {
   existing: Claim | null;
@@ -31,6 +31,9 @@ export interface ClaimsDeps {
     signature: string;
     signedDate: string;
     action: "claim" | "unclaim";
+    /** Category and name chosen in the claim form; used only when the tool is new. */
+    category?: Category;
+    toolName?: string;
   }) => Promise<Claim>;
 }
 
@@ -107,6 +110,8 @@ export async function processClaim(
     signature: req.signature,
     signedDate: parsed.date,
     action: parsed.action,
+    category: req.category,
+    toolName: req.toolName,
   });
   return { ok: true, claim, checks };
 }

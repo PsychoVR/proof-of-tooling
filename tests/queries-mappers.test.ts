@@ -8,6 +8,7 @@ import {
   type ValidatorRow,
 } from "@/lib/query-mappers";
 import { SEED_TOOLS } from "@/db/seed-data";
+import { normalizeToolUrl } from "@/lib/claims/message";
 
 const D = new Date("2026-10-07T00:00:00Z");
 const tool = (id: number, category: ToolRow["category"] = "Explorer"): ToolRow => ({
@@ -57,6 +58,9 @@ describe("buildToolsWithClaims", () => {
       [{ identity: "A", cluster: "mainnet", name: "Alpha" }],
     );
     expect(out.map((t) => t.status)).toEqual(["claimed", "unclaimed", "unclaimed"]);
+    expect(out[0].owner).toEqual({ name: "Alpha", identity: "A" });
+    expect(out[1].owner).toEqual({ name: "Alpha", identity: "A" });
+    expect(out[2].owner).toBeNull();
     expect(out[0].claimedBy).toEqual([{ identity: "A", cluster: "mainnet", name: "Alpha" }]);
     expect(out[1].claims).toHaveLength(1);
     expect(out[2].claims).toHaveLength(0);
@@ -76,7 +80,7 @@ describe("buildStats", () => {
 describe("buildLeaderboard", () => {
   const tools = [tool(1), tool(2), tool(3)];
   const validators = [vrow("A", "Alpha", 10n), vrow("B", "Beta", 99n), vrow("C", "Gamma", 5n), vrow("D", null, 1n)];
-  const claims = [{ toolId: 1, identity: "A", cluster: "mainnet" as const }, { toolId: 2, identity: "C", cluster: "mainnet" as const }];
+  const claims = [{ toolId: 1, identity: "A", cluster: "mainnet" as const, status: "active" as const }, { toolId: 2, identity: "C", cluster: "mainnet" as const, status: "stale" as const }];
   const seeds = [
     { toolId: 3, validatorName: " alpha " },
     { toolId: 1, validatorName: "Alpha" },
@@ -87,14 +91,16 @@ describe("buildLeaderboard", () => {
     expect(total).toBe(2);
     expect(items.map((r) => r.validator.identity)).toEqual(["A", "C"]);
     expect(items[0]).toMatchObject({ toolCount: 2, claimedCount: 1 });
+    expect(items[0].tools.map((t) => [t.id, t.status])).toEqual([[1, "signed"], [3, "unclaimed"]]);
+    expect(items[1].tools.map((t) => [t.id, t.status])).toEqual([[2, "stale"]]);
     expect(items[0].validator.activatedStake).toBe("10");
   });
 
   it("breaks ties by stake and paginates", () => {
-    const rows = buildLeaderboard(validators, [{ toolId: 1, identity: "A", cluster: "mainnet" }, { toolId: 1, identity: "B", cluster: "mainnet" }], [], tools, 1, 1);
+    const rows = buildLeaderboard(validators, [{ toolId: 1, identity: "A", cluster: "mainnet", status: "active" as const }, { toolId: 1, identity: "B", cluster: "mainnet", status: "active" as const }], [], tools, 1, 1);
     expect(rows.total).toBe(2);
     expect(rows.items[0].validator.identity).toBe("B");
-    const p2 = buildLeaderboard(validators, [{ toolId: 1, identity: "A", cluster: "mainnet" }, { toolId: 1, identity: "B", cluster: "mainnet" }], [], tools, 2, 1);
+    const p2 = buildLeaderboard(validators, [{ toolId: 1, identity: "A", cluster: "mainnet", status: "active" as const }, { toolId: 1, identity: "B", cluster: "mainnet", status: "active" as const }], [], tools, 2, 1);
     expect(p2.items[0].validator.identity).toBe("A");
   });
 });
@@ -104,5 +110,14 @@ describe("seed data", () => {
     expect(SEED_TOOLS).toHaveLength(7);
     expect(new Set(SEED_TOOLS.map((s) => s.slug)).size).toBe(7);
     expect(new Set(SEED_TOOLS.map((s) => s.url)).size).toBe(7);
+  });
+});
+
+describe("canonical tool urls", () => {
+  it("seed tool urls are stored scheme-less and without www", () => {
+    for (const s of SEED_TOOLS) {
+      expect(s.url).toBe(normalizeToolUrl(s.url));
+      expect(s.url).not.toMatch(/^https?:\/\/|^www\./);
+    }
   });
 });

@@ -1,3 +1,4 @@
+import { normalizeToolUrl } from "@/lib/claims/message";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { tools } from "@/db/schema";
@@ -35,9 +36,7 @@ const DAY = 86_400_000;
 const MIN_REMAINING = 5;
 
 export function parseRepo(url: string): { owner: string; repo: string } | null {
-  const m = /^(?:https?:\/\/)?(?:www\.)?github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?(?:[/?#].*)?$/.exec(
-    url.trim(),
-  );
+  const m = /^github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)(?:\/.*)?$/.exec(normalizeToolUrl(url));
   return m ? { owner: m[1], repo: m[2] } : null;
 }
 

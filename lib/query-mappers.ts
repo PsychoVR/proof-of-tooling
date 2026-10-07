@@ -7,6 +7,7 @@ import {
   type Cluster,
   type Endorsement,
   type LeaderboardRow,
+  type LeaderboardToolStatus,
   type Stats,
   type Tool,
   type ToolWithClaims,
@@ -81,11 +82,16 @@ export type ValidatorName = { identity: string; cluster: Cluster; name: string |
 
 const nameKey = (identity: string, cluster: string) => `${identity}:${cluster}`;
 
+export type SeedRef = { toolId: number; validatorName: string };
+
 export function buildToolsWithClaims(
   toolRows: ToolRow[],
   claimRows: ClaimRow[],
   names: ValidatorName[],
+  seeds: SeedRef[] = [],
 ): ToolWithClaims[] {
+  const seedByTool = new Map<number, string>();
+  for (const sd of seeds) if (!seedByTool.has(sd.toolId)) seedByTool.set(sd.toolId, sd.validatorName);
   const nameMap = new Map(names.map((n) => [nameKey(n.identity, n.cluster), n.name]));
   const byTool = new Map<number, Claim[]>();
   for (const c of claimRows) {
@@ -97,9 +103,18 @@ export function buildToolsWithClaims(
   return toolRows.map((t) => {
     const cl = byTool.get(t.id) ?? [];
     const active = cl.filter((c) => c.status === "active");
+    const lead = active[0] ?? cl[0];
+    const seedName = seedByTool.get(t.id);
+    const leadName = lead ? (nameMap.get(nameKey(lead.identity, lead.cluster)) ?? null) : null;
+    const owner: ToolWithClaims["owner"] = lead
+      ? { name: leadName ?? seedName ?? lead.identity, identity: lead.identity }
+      : seedName
+        ? { name: seedName, identity: null }
+        : null;
     return {
       ...mapTool(t),
       status: active.length > 0 ? "claimed" : "unclaimed",
+      owner,
       claims: cl,
       claimedBy: active.map((c) => ({
         identity: c.identity,
@@ -142,17 +157,20 @@ type LeaderTool = LeaderboardRow["tools"][number];
  */
 export function buildLeaderboard(
   validatorRows: ValidatorRow[],
-  activeClaims: Pick<ClaimRow, "toolId" | "identity" | "cluster">[],
-  seeds: { toolId: number; validatorName: string }[],
+  liveClaims: Pick<ClaimRow, "toolId" | "identity" | "cluster" | "status">[],
+  seeds: SeedRef[],
   toolRows: ToolRow[],
   page: number,
   pageSize: number,
 ): { items: LeaderboardRow[]; total: number } {
   const toolById = new Map(toolRows.map((t) => [t.id, t]));
-  const claimsByKey = new Map<string, Set<number>>();
-  for (const c of activeClaims) {
+  // tool id -> "signed" if any active claim, else "stale", per validator
+  const claimsByKey = new Map<string, Map<number, LeaderboardToolStatus>>();
+  for (const c of liveClaims) {
+    if (c.status !== "active" && c.status !== "stale") continue;
     const k = nameKey(c.identity, c.cluster);
-    (claimsByKey.get(k) ?? claimsByKey.set(k, new Set()).get(k)!).add(c.toolId);
+    const m = claimsByKey.get(k) ?? claimsByKey.set(k, new Map()).get(k)!;
+    if (c.status === "active" || !m.has(c.toolId)) m.set(c.toolId, c.status === "active" ? "signed" : "stale");
   }
   const seedsByName = new Map<string, Set<number>>();
   for (const s of seeds) {
@@ -162,20 +180,23 @@ export function buildLeaderboard(
 
   const rows: LeaderboardRow[] = [];
   for (const v of validatorRows) {
-    const claimed = claimsByKey.get(nameKey(v.identity, v.cluster)) ?? new Set<number>();
+    const claimed = claimsByKey.get(nameKey(v.identity, v.cluster)) ?? new Map<number, LeaderboardToolStatus>();
     const seeded = v.name ? (seedsByName.get(normName(v.name)) ?? new Set<number>()) : new Set<number>();
-    const all = new Set([...claimed, ...seeded]);
+    const all = new Set([...claimed.keys(), ...seeded]);
     const list: LeaderTool[] = [];
     for (const id of all) {
       const t = toolById.get(id);
-      if (t) list.push({ id: t.id, slug: t.slug, name: t.name, category: t.category, url: t.url });
+      if (t) {
+        const status = claimed.get(id) ?? "unclaimed";
+        list.push({ id: t.id, slug: t.slug, name: t.name, category: t.category, url: t.url, status });
+      }
     }
     if (list.length === 0) continue;
     list.sort((a, b) => a.name.localeCompare(b.name));
     rows.push({
       validator: mapValidator(v),
       toolCount: list.length,
-      claimedCount: [...claimed].filter((id) => toolById.has(id)).length,
+      claimedCount: list.filter((t) => t.status === "signed").length,
       tools: list,
     });
   }

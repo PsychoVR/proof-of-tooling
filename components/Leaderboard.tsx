@@ -27,6 +27,11 @@ function Seg<T extends string>({ label, value, options, onChange }: {
   );
 }
 
+function rowStatus(r: LeaderboardRow): "claimed" | "stale" | "unclaimed" {
+  if (r.tools.some((t) => t.status === "signed")) return "claimed";
+  return r.tools.some((t) => t.status === "stale") ? "stale" : "unclaimed";
+}
+
 export function Leaderboard({ rows }: { rows: LeaderboardRow[] }) {
   const [cluster, setCluster] = useState<Cluster | "all">("all");
   const [category, setCategory] = useState<Category | "all">("all");
@@ -38,8 +43,8 @@ export function Leaderboard({ rows }: { rows: LeaderboardRow[] }) {
     return rows.filter((r) => {
       if (cluster !== "all" && r.validator.cluster !== cluster) return false;
       if (category !== "all" && !r.tools.some((t) => t.category === category)) return false;
-      if (status === "claimed" && r.claimedCount === 0) return false;
-      if (status === "unclaimed" && r.claimedCount === r.toolCount) return false;
+      if (status === "claimed" && !r.tools.some((t) => t.status === "signed")) return false;
+      if (status === "unclaimed" && !r.tools.some((t) => t.status === "unclaimed")) return false;
       if (!q) return true;
       const hay = [r.validator.name ?? "", r.validator.identity, ...r.tools.map((t) => t.name)].join(" ").toLowerCase();
       return hay.includes(q);
@@ -145,13 +150,13 @@ export function Leaderboard({ rows }: { rows: LeaderboardRow[] }) {
                         {r.tools.length === 0 ? (
                           <span className="vsub">No tools yet</span>
                         ) : (
-                          r.tools.map((t) => <ToolChip key={t.id} tool={t} />)
+                          r.tools.map((t) => <ToolChip key={t.id} tool={t} status={t.status} />)
                         )}
                       </div>
                     </td>
                     <td className="count">{r.toolCount}</td>
                     <td>
-                      <StatusPill status={r.claimedCount > 0 ? "claimed" : "unclaimed"} />
+                      <StatusPill status={rowStatus(r)} />
                     </td>
                   </tr>
                 );

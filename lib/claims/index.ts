@@ -1,4 +1,4 @@
-export { buildClaimMessage, isPrintableAscii, isValidDate, normalizeToolUrl, parseClaimMessage } from "./message";
+export { buildClaimMessage, isPrintableAscii, isValidDate, normalizeToolUrl, parseClaimMessage, toolDisplayUrl } from "./message";
 export { serializeOffchainV0 } from "./offchain";
 export { verifyClaimSignature } from "./verify";
 export type { VerifyInput, VerifyResult } from "./verify";

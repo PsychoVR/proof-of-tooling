@@ -4,10 +4,13 @@ import { KpiStrip } from "@/components/KpiStrip";
 import { Leaderboard } from "@/components/Leaderboard";
 import { Odometer } from "@/components/Odometer";
 import { StatusStack } from "@/components/StatusStack";
-import { getLeaderboardRows, getStats } from "@/lib/ui/data";
+import { getLeaderboard, getStats } from "@/lib/queries";
+
+export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const [stats, rows] = await Promise.all([getStats(), getLeaderboardRows()]);
+  const [stats, board] = await Promise.all([getStats(), getLeaderboard({ pageSize: 100 })]);
+  const rows = board.items;
   return (
     <>
       <section className="hero">

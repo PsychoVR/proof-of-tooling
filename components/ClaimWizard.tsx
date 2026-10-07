@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { CATEGORIES, type Category, type ClaimCheckResponse } from "@/lib/types";
+import { CATEGORIES, type Category, type ClaimCheckResponse, type ClaimResponse } from "@/lib/types";
 import {
   CHECK_LABELS,
   buildClaimMessage,
   checkClaim,
+  registerClaim,
   signCommand,
   validateIdentity,
   validateToolUrl,
@@ -23,6 +24,7 @@ export function ClaimWizard() {
   const [signature, setSignature] = useState("");
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [registered, setRegistered] = useState<ClaimResponse | null | undefined>(undefined);
   const [outcome, setOutcome] = useState<{ result: ClaimCheckResponse; simulated: boolean } | null>(null);
   // Date is fixed when the wizard opens so the message does not change under the signer.
   const [date] = useState(() => new Date().toISOString().slice(0, 10));
@@ -30,6 +32,7 @@ export function ClaimWizard() {
   const urlErr = validateToolUrl(url);
   const idErr = validateIdentity(identity);
   const message = buildClaimMessage(url, identity, date);
+  const request = { message, signature: signature.trim(), category, toolName: toolName.trim() };
 
   const next = () => {
     setTouched(true);
@@ -42,7 +45,17 @@ export function ClaimWizard() {
     setBusy(true);
     setOutcome(null);
     try {
-      setOutcome(await checkClaim({ message, signature: signature.trim() }));
+      setRegistered(undefined);
+      setOutcome(await checkClaim(request));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const register = async () => {
+    setBusy(true);
+    try {
+      setRegistered(await registerClaim(request));
     } finally {
       setBusy(false);
     }
@@ -151,6 +164,16 @@ export function ClaimWizard() {
                     </li>
                   ))}
                 </ul>
+                {outcome.result.ok && !outcome.simulated && registered === undefined && (
+                  <div className="btns">
+                    <button type="button" className="btn primary" onClick={register} disabled={busy}>
+                      {busy ? "Registering..." : "Register claim"}
+                    </button>
+                  </div>
+                )}
+                {registered && registered.ok && <strong className="ok">Claim registered.</strong>}
+                {registered === null && <strong className="bad">Could not reach the service. Try again.</strong>}
+                {registered && !registered.ok && <strong className="bad">The claim was not recorded.</strong>}
                 {outcome.simulated && (
                   <span className="mock-note">
                     Preview mode: the verification service is not connected yet, so this result is simulated and

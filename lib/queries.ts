@@ -31,6 +31,10 @@ async function withClaims(toolRows: ToolRow[]): Promise<ToolWithClaims[]> {
     .select()
     .from(claims)
     .where(and(inArray(claims.toolId, toolRows.map((t) => t.id)), inArray(claims.status, [...PUBLIC_CLAIM_STATUSES])));
+  const seeds = await db
+    .select({ toolId: seedEntries.toolId, validatorName: seedEntries.validatorName })
+    .from(seedEntries)
+    .where(inArray(seedEntries.toolId, toolRows.map((t) => t.id)));
   const ids = [...new Set(claimRows.map((c) => c.identity))];
   const names = ids.length
     ? await db
@@ -38,7 +42,7 @@ async function withClaims(toolRows: ToolRow[]): Promise<ToolWithClaims[]> {
         .from(validators)
         .where(inArray(validators.identity, ids))
     : [];
-  return buildToolsWithClaims(toolRows, claimRows, names);
+  return buildToolsWithClaims(toolRows, claimRows, names, seeds);
 }
 
 export async function getStats(): Promise<Stats> {
@@ -60,16 +64,16 @@ export async function getLeaderboard(opts: {
   const pageSize = Math.min(100, Math.max(1, Math.floor(opts.pageSize ?? 25)));
   const db = getDb();
 
-  const [activeClaims, seeds, toolRows] = await Promise.all([
+  const [liveClaims, seeds, toolRows] = await Promise.all([
     db
-      .select({ toolId: claims.toolId, identity: claims.identity, cluster: claims.cluster })
+      .select({ toolId: claims.toolId, identity: claims.identity, cluster: claims.cluster, status: claims.status })
       .from(claims)
-      .where(eq(claims.status, "active")),
+      .where(inArray(claims.status, [...PUBLIC_CLAIM_STATUSES])),
     db.select({ toolId: seedEntries.toolId, validatorName: seedEntries.validatorName }).from(seedEntries),
     db.select().from(tools),
   ]);
 
-  const identities = [...new Set(activeClaims.map((c) => c.identity))];
+  const identities = [...new Set(liveClaims.map((c) => c.identity))];
   const seedNames = [...new Set(seeds.map((s) => normName(s.validatorName)))];
   const match = or(
     identities.length ? inArray(validators.identity, identities) : undefined,
@@ -83,7 +87,7 @@ export async function getLeaderboard(opts: {
     .where(opts.cluster ? and(eq(validators.cluster, opts.cluster), match) : match)
     .orderBy(desc(validators.activatedStake));
 
-  const { items, total } = buildLeaderboard(validatorRows, activeClaims, seeds, toolRows, page, pageSize);
+  const { items, total } = buildLeaderboard(validatorRows, liveClaims, seeds, toolRows, page, pageSize);
   return { items, page, pageSize, total };
 }
 
@@ -131,6 +135,11 @@ export async function getTools(opts: {
     .orderBy(tools.name);
   const all = await withClaims(rows);
   return opts.status ? all.filter((t) => t.status === opts.status) : all;
+}
+
+export async function getToolBySlug(slug: string): Promise<ToolWithClaims | null> {
+  const rows = await getDb().select().from(tools).where(eq(tools.slug, slug)).limit(1);
+  return (await withClaims(rows))[0] ?? null;
 }
 
 /** Full public registry: every active or stale claim with its message and signature. */

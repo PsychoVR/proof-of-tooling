@@ -1,53 +1,14 @@
-import dns from "node:dns/promises";
-import net from "node:net";
 import { and, count, eq, gte, ne } from "drizzle-orm";
 import { getDb } from "@/db";
 import { claims, tools, validators } from "@/db/schema";
 import { getEnv } from "@/lib/env";
+import { safeFetcher } from "@/lib/safe-fetch";
 import type { Fetcher, RepoMetadata } from "@/lib/claims";
 import { proofFileUrl } from "@/lib/claims";
 import type { ClaimsDeps } from "@/lib/claims-service";
 import type { Claim, Cluster } from "@/lib/types";
 
 const FETCH_TIMEOUT_MS = 5000;
-const MAX_BYTES = 64 * 1024 + 1;
-
-function isPrivateIp(ip: string): boolean {
-  if (net.isIPv6(ip)) {
-    const v = ip.toLowerCase();
-    return v === "::1" || v === "::" || v.startsWith("fc") || v.startsWith("fd") || v.startsWith("fe80") || v.startsWith("::ffff:");
-  }
-  const [a, b] = ip.split(".").map(Number);
-  return (
-    a === 10 || a === 127 || a === 0 || a >= 224 ||
-    (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127)
-  );
-}
-
-/** Fetches a public https URL: no redirects, short timeout, capped body, no private addresses. */
-export const safeFetcher: Fetcher = async (url) => {
-  const u = new URL(url);
-  if (u.protocol !== "https:" || u.port !== "") throw new Error("blocked url");
-  const addrs = await dns.lookup(u.hostname, { all: true });
-  if (addrs.length === 0 || addrs.some((a) => isPrivateIp(a.address))) throw new Error("blocked address");
-  const res = await fetch(u, { redirect: "manual", signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
-  const reader = res.body?.getReader();
-  let body = "";
-  let size = 0;
-  const decoder = new TextDecoder();
-  while (reader) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.length;
-    body += decoder.decode(value, { stream: true });
-    if (size > MAX_BYTES) {
-      await reader.cancel();
-      break;
-    }
-  }
-  return { status: res.status, body };
-};
 
 async function gh<T>(path: string): Promise<{ data: T; link: string | null } | null> {
   const headers: Record<string, string> = { Accept: "application/vnd.github+json", "User-Agent": "proof-of-tooling" };
@@ -124,8 +85,8 @@ export function createClaimsDeps(): ClaimsDeps {
       let [tool] = await db.select().from(tools).where(eq(tools.url, input.toolUrl));
       if (!tool) {
         const kind = proofFileUrl(input.toolUrl)?.kind ?? "web";
-        const name = input.toolUrl.split("/").pop() ?? input.toolUrl;
-        await db.insert(tools).values({ slug: slugOf(input.toolUrl), url: input.toolUrl, name, category: "Ops script", kind });
+        const name = input.toolName?.trim() || (input.toolUrl.split("/").pop() ?? input.toolUrl);
+        await db.insert(tools).values({ slug: slugOf(input.toolUrl), url: input.toolUrl, name, category: input.category ?? "Ops script", kind });
         [tool] = await db.select().from(tools).where(eq(tools.url, input.toolUrl));
       }
       const status = input.action === "claim" ? "active" : "withdrawn";

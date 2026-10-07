@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { claims, tools } from "@/db/schema";
 import { checkProofFile } from "@/lib/claims";
+import { safeFetcher } from "@/lib/safe-fetch";
 import type { ClaimCheckResult } from "@/lib/types";
 
 export interface ActiveClaim {
@@ -52,7 +53,7 @@ const defaults: ReverifyDeps = {
       .from(claims)
       .innerJoin(tools, eq(tools.id, claims.toolId))
       .where(eq(claims.status, "active")),
-  check: checkProofFile,
+  check: (toolUrl, identity) => checkProofFile(toolUrl, identity, safeFetcher),
   markOk: async (id, now) => {
     await getDb().update(claims).set({ verifiedAt: now, lastCheckedAt: now }).where(eq(claims.id, id));
   },

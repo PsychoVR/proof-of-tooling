@@ -36,6 +36,8 @@ export const MIN_AGE_DAYS = 7;
 export const MAX_CLAIMS_PER_DAY = 5;
 /** Tools one identity may hold under the same registrable domain before a review is needed. */
 export const MAX_TOOLS_PER_DOMAIN = 5;
+/** Claims one identity may have waiting for manual review; above this new ones are refused. */
+export const MAX_PENDING_PER_IDENTITY = 3;
 
 export function evaluateRepoRules(repo: RepoMetadata, ctx: RuleContext): RuleOutcome {
   const rejects: string[] = [];

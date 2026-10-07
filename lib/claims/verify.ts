@@ -31,6 +31,11 @@ function decodeFixed(s: string, length: number): Uint8Array | null {
   }
 }
 
+/** True when the string is base58 for exactly 32 bytes (a Solana public key). */
+export function isValidPubkey(s: string): boolean {
+  return decodeFixed(s, 32) !== null;
+}
+
 /** Whole UTC calendar days between the signed date and today. */
 function daysSince(date: string, now: Date): number {
   const signed = Date.parse(`${date}T00:00:00Z`);

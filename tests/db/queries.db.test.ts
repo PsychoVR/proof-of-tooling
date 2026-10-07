@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { getDb } from "@/db";
 import { CLI_IDENTITY, DEV_VALIDATORS as V, resetDevDb, seedDevData } from "@/db/dev-data";
-import { claimDecisions, claims, validators as validatorsTable } from "@/db/schema";
+import { claimDecisions, claims, tools, validators as validatorsTable } from "@/db/schema";
 import { adminDbDeps, decideClaim, listPendingClaims } from "@/lib/admin-claims";
 import { createClaimsDeps } from "@/lib/claims-deps";
 import { processClaim } from "@/lib/claims-service";
@@ -258,19 +258,19 @@ describe("moderation on MariaDB", () => {
   const badProof = { ...adminDbDeps, checkProof: async () => ({ id: "proof" as const, ok: false, detail: "gone" }) };
 
   it("lists pending claims with an etag", async () => {
-    const list = await listPendingClaims();
+    const list = (await listPendingClaims()).items;
     expect(list).toHaveLength(1);
     expect(list[0]).toMatchObject({ toolName: "New Tool", toolUrl: "github.com/blocklogic/new-tool", identity: V.blockLogic.identity });
     expect(list[0].etag).toMatch(/^[0-9a-f]{32}$/);
   });
 
   it("requires the etag, applies approve once, re-checks the proof and writes the audit trail", async () => {
-    const [p] = await listPendingClaims();
+    const [p] = (await listPendingClaims()).items;
     const before = await getStats();
     expect(await decideClaim(p.id, "approve", { actor: "rafa", ifMatch: null }, okProof)).toEqual({ ok: false, code: "precondition_required" });
     expect(await decideClaim(p.id, "approve", { actor: "rafa", ifMatch: "0".repeat(32) }, okProof)).toEqual({ ok: false, code: "precondition_failed" });
     expect(await decideClaim(p.id, "approve", { actor: "rafa", ifMatch: p.etag }, badProof)).toEqual({ ok: false, code: "proof_invalid", detail: "gone" });
-    expect((await listPendingClaims())).toHaveLength(1); // nothing applied yet
+    expect((await listPendingClaims()).items).toHaveLength(1); // nothing applied yet
     expect(await decideClaim(p.id, "approve", { actor: "rafa", ifMatch: p.etag }, okProof)).toEqual({ ok: true, id: p.id, status: "active" });
     expect(await decideClaim(p.id, "approve", { actor: "rafa", ifMatch: p.etag }, okProof)).toEqual({ ok: false, code: "not_found" });
     const after = await getStats();
@@ -282,16 +282,143 @@ describe("moderation on MariaDB", () => {
   });
 
   it("does not apply a decision if the claim changed after it was reviewed", async () => {
-    const [p] = await listPendingClaims();
+    const [p] = (await listPendingClaims()).items;
     await getDb().update(claims).set({ message: `${p.message} ` }).where(eq(claims.id, p.id));
     expect(await decideClaim(p.id, "reject", { actor: "a", ifMatch: p.etag }, okProof)).toEqual({ ok: false, code: "precondition_failed" });
-    expect((await listPendingClaims())[0].id).toBe(p.id);
+    expect((await listPendingClaims()).items[0].id).toBe(p.id);
   });
 
   it("reject does not need the proof file and is audited", async () => {
-    const [p] = await listPendingClaims();
+    const [p] = (await listPendingClaims()).items;
     expect(await decideClaim(p.id, "reject", { actor: "rafa", ifMatch: p.etag }, badProof)).toEqual({ ok: true, id: p.id, status: "rejected" });
     expect((await getDb().select().from(claimDecisions))[0]).toMatchObject({ decision: "reject", actor: "rafa" });
     expect((await getRegistry()).entries.map((e) => e.tool.name)).not.toContain("New Tool");
+  });
+});
+
+// ---- N1: transactional saveClaim ----
+
+describe("saveClaim transaction (N1)", () => {
+  beforeEach(async () => {
+    await resetDevDb();
+    await seedDevData();
+  });
+  const input = (over: Partial<Parameters<ReturnType<typeof createClaimsDeps>["saveClaim"]>[0]> = {}) => ({
+    toolUrl: TOOL,
+    identity: CLI_IDENTITY,
+    cluster: "mainnet" as const,
+    message: "m",
+    signature: "s".repeat(64),
+    signedDate: "2026-10-07",
+    action: "claim" as const,
+    category: "Meta" as const,
+    toolName: "Proof of Tooling",
+    ...over,
+  });
+
+  it("claim -> unclaim -> claim dated later: the owner can claim again", async () => {
+    const d = createClaimsDeps();
+    expect((await d.saveClaim(input({ message: "claim-1" }))).status).toBe("active");
+    expect((await d.saveClaim(input({ message: "unclaim-1", action: "unclaim" }))).status).toBe("withdrawn");
+    // a claim signed the same day loses against the unclaim...
+    expect(await d.saveClaim(input({ message: "claim-same-day" }))).toMatchObject({ status: "withdrawn", message: "unclaim-1" });
+    // ...but one signed later re-activates it and replaces message, signature and date
+    const again = await d.saveClaim(input({ message: "claim-2", signature: "t".repeat(64), signedDate: "2026-10-08" }));
+    expect(again).toMatchObject({ status: "active", message: "claim-2", signedDate: "2026-10-08", signature: "t".repeat(64) });
+    const row = await claimRow();
+    expect(row).toMatchObject({ status: "active", message: "claim-2", signedDate: "2026-10-08" });
+    expect(await getDb().select().from(claims).where(eq(claims.identity, CLI_IDENTITY))).toHaveLength(1);
+  });
+
+  it("a later claim after an unclaim can also go to review (pending)", async () => {
+    const d = createClaimsDeps();
+    await d.saveClaim(input());
+    await d.saveClaim(input({ action: "unclaim", message: "u" }));
+    expect((await d.saveClaim(input({ signedDate: "2026-10-09", pending: true }))).status).toBe("pending");
+  });
+
+  it("older messages and rejected rows are kept as they are", async () => {
+    const d = createClaimsDeps();
+    await d.saveClaim(input({ message: "new", signedDate: "2026-10-08" }));
+    expect(await d.saveClaim(input({ message: "old", signedDate: "2026-10-06", action: "unclaim" }))).toMatchObject({ status: "active", message: "new" });
+    await getDb().update(claims).set({ status: "rejected" }).where(eq(claims.identity, CLI_IDENTITY));
+    expect(await d.saveClaim(input({ message: "later", signedDate: "2026-10-20" }))).toMatchObject({ status: "rejected", message: "new" });
+  });
+
+  it("concurrent identical requests leave one consistent row", async () => {
+    const d = createClaimsDeps();
+    const results = await Promise.all(Array.from({ length: 8 }, (_, i) => d.saveClaim(input({ message: `m${i}` }))));
+    expect(results.every((r) => r.status === "active")).toBe(true);
+    expect(await getDb().select().from(claims).where(eq(claims.identity, CLI_IDENTITY))).toHaveLength(1);
+    expect((await getDb().select().from(tools).where(eq(tools.url, TOOL)))).toHaveLength(1);
+  });
+
+  it("a claim and an unclaim racing on the same day always end withdrawn", async () => {
+    const d = createClaimsDeps();
+    await d.saveClaim(input({ message: "first" }));
+    for (let i = 0; i < 5; i++) {
+      await Promise.all([d.saveClaim(input({ message: `claim-${i}` })), d.saveClaim(input({ message: `unclaim-${i}`, action: "unclaim" }))]);
+      expect((await claimRow()).status).toBe("withdrawn");
+      await d.saveClaim(input({ message: `reset-${i}`, signedDate: `2026-10-${10 + i}` })); // a later claim re-activates
+      expect((await claimRow()).status).toBe("active");
+      await d.saveClaim(input({ message: `u-${i}`, action: "unclaim", signedDate: `2026-10-${10 + i}` }));
+    }
+  });
+
+  it("gives tools with colliding slugs distinct slugs instead of failing", async () => {
+    const d = createClaimsDeps();
+    await d.saveClaim(input({ toolUrl: "example.com/a-b", toolName: "A", message: "1" }));
+    await d.saveClaim(input({ toolUrl: "example.com/a/b", toolName: "B", message: "2" }));
+    const slugs = (await getDb().select({ slug: tools.slug }).from(tools).where(sql`url LIKE 'example.com/%'`)).map((r) => r.slug);
+    expect(slugs).toHaveLength(2);
+    expect(new Set(slugs).size).toBe(2);
+  });
+});
+
+// ---- N2: pending cap and admin pagination ----
+
+describe("pending limit and pagination (N2)", () => {
+  beforeEach(async () => {
+    await resetDevDb();
+    await seedDevData();
+  });
+  const save = (n: number, id: string = V.quiet.identity) =>
+    createClaimsDeps().saveClaim({ toolUrl: `example${n}.com`, identity: id, cluster: "mainnet", message: `m${n}`, signature: "s".repeat(64), signedDate: "2026-10-07", action: "claim", pending: true, toolName: `T${n}`, category: "Library" });
+
+  it("allows 3 pending claims per identity and refuses the 4th, atomically under concurrency", async () => {
+    const { PendingLimitError } = await import("@/lib/claims-service");
+    const results = await Promise.allSettled([1, 2, 3, 4, 5, 6].map((n) => save(n)));
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(3);
+    const failed = results.filter((r) => r.status === "rejected") as PromiseRejectedResult[];
+    expect(failed).toHaveLength(3);
+    for (const f of failed) expect(f.reason).toBeInstanceOf(PendingLimitError);
+    const n = await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM claims WHERE identity = ${V.quiet.identity} AND status = 'pending'`);
+    expect(Number(n[0].n)).toBe(3);
+    // failed attempts leave no orphan tools behind
+    const orphan = await rows<{ n: number }>(sql`SELECT COUNT(*) AS n FROM tools WHERE url LIKE 'example%.com'`);
+    expect(Number(orphan[0].n)).toBe(3);
+  });
+
+  it("the limit is per identity, ignores re-sending the same pending claim, and frees up after a decision", async () => {
+    for (const n of [1, 2, 3]) await save(n);
+    await expect(save(4)).rejects.toThrow("pending claim limit reached");
+    await expect(save(1)).resolves.toMatchObject({ status: "pending" }); // same claim again: no new slot needed
+    await expect(save(7, V.laine.identity)).resolves.toMatchObject({ status: "pending" }); // another identity
+    const first = (await listPendingClaims()).items.find((i) => i.identity === V.quiet.identity)!;
+    await decideClaim(first.id, "reject", { actor: "t", ifMatch: first.etag }, { ...adminDbDeps, checkProof: async () => ({ id: "proof" as const, ok: true }) });
+    await expect(save(4)).resolves.toMatchObject({ status: "pending" });
+  });
+
+  it("paginates the pending list oldest first, with the total", async () => {
+    for (const n of [1, 2, 3]) await save(n);
+    for (const n of [4, 5]) await save(n, V.laine.identity);
+    const all = await listPendingClaims();
+    expect(all).toMatchObject({ total: 6, limit: 50, offset: 0 }); // 5 above + Block Logic's from the dev data
+    const page = await listPendingClaims({ limit: 2, offset: 1 });
+    expect(page).toMatchObject({ total: 6, limit: 2, offset: 1 });
+    expect(page.items.map((i) => i.id)).toEqual(all.items.slice(1, 3).map((i) => i.id));
+    expect((await listPendingClaims({ limit: 1000 })).limit).toBe(100);
+    expect((await listPendingClaims({ limit: 0, offset: -5 }))).toMatchObject({ limit: 1, offset: 0 });
+    expect((await listPendingClaims({ offset: 100 })).items).toEqual([]);
   });
 });

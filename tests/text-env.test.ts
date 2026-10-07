@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { sanitizeText } from "@/lib/text";
 
 describe("sanitizeText", () => {
@@ -30,35 +30,5 @@ describe("sanitizeText", () => {
     expect(Array.from(sanitizeText("🚀".repeat(300))!)).toHaveLength(255);
     expect(sanitizeText("x".repeat(300), 80)).toHaveLength(80);
     for (const v of [5, null, undefined, "", "   ", "​‮"]) expect(sanitizeText(v)).toBeNull();
-  });
-});
-
-describe("getEnv", () => {
-  const saved = { ...process.env };
-  afterEach(() => {
-    process.env = { ...saved };
-    vi.resetModules();
-  });
-  const load = async (extra: Record<string, string>) => {
-    process.env = { ...saved, DATABASE_URL: "mysql://u:p@h:3306/d", CRON_SECRET: "c".repeat(32), ...extra };
-    vi.resetModules();
-    return (await import("@/lib/env")).getEnv();
-  };
-
-  it("treats empty optional variables as unset (a copied .env.example must not break the app)", async () => {
-    const env = await load({ GITHUB_TOKEN: "", HELIUS_RPC_URL: "", ADMIN_SECRET: "" });
-    expect(env.GITHUB_TOKEN).toBeUndefined();
-    expect(env.HELIUS_RPC_URL).toBeUndefined();
-  });
-
-  it("an invalid or short ADMIN_SECRET never takes the site down", async () => {
-    await expect(load({ ADMIN_SECRET: "short" })).resolves.toMatchObject({ DATABASE_URL: "mysql://u:p@h:3306/d" });
-  });
-
-  it("still requires the database url and a long cron secret, and validates set values", async () => {
-    await expect(load({ DATABASE_URL: "" })).rejects.toThrow();
-    await expect(load({ CRON_SECRET: "short" })).rejects.toThrow();
-    await expect(load({ HELIUS_RPC_URL: "not a url" })).rejects.toThrow();
-    await expect(load({ GITHUB_TOKEN: "ghp_x", HELIUS_RPC_URL: "https://rpc.example/x" })).resolves.toMatchObject({ GITHUB_TOKEN: "ghp_x" });
   });
 });

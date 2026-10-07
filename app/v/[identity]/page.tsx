@@ -6,22 +6,23 @@ import { CodeBlock } from "@/components/CodeBlock";
 import { StatusPill } from "@/components/StatusPill";
 import { ToolChip } from "@/components/ToolChip";
 import { getValidatorProfile } from "@/lib/queries";
+import { parseIdentityParam } from "@/lib/ui/params";
 import { MULTI_CLUSTER } from "@/lib/clusters";
-import { CLUSTER_LABEL, displayName, formatDate, formatStake, safeHttpUrl, toolPillStatus } from "@/lib/ui/format";
+import { CLUSTER_LABEL, displayName, formatDate, formatStake, safeHttpUrl, shortKey, toolPillStatus } from "@/lib/ui/format";
 
 export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ identity: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { identity } = await params;
-  const profile = await getValidatorProfile(decodeURIComponent(identity));
+  const id = parseIdentityParam((await params).identity);
+  const profile = id ? await getValidatorProfile(id) : null;
   return { title: profile ? displayName(profile.validator) : "Validator not found" };
 }
 
 export default async function ValidatorPage({ params }: Props) {
-  const { identity } = await params;
-  const profile = await getValidatorProfile(decodeURIComponent(identity));
+  const id = parseIdentityParam((await params).identity);
+  const profile = id ? await getValidatorProfile(id) : null; // not a public key: 404 without touching the database
   if (!profile) notFound();
   const { validator: v, tools, endorsements } = profile;
   const name = displayName(v);
@@ -35,6 +36,7 @@ export default async function ValidatorPage({ params }: Props) {
         <Avatar name={name} large />
         <div>
           <h1 className="page-title" style={{ marginTop: 0 }}>{name}</h1>
+          <span className="vsub mono" title={v.identity}>{shortKey(v.identity)}</span>{" "}
           {MULTI_CLUSTER && <span className="cluster-tag">{CLUSTER_LABEL[v.cluster]}</span>}{" "}
           {v.delinquent && <span className="status withdrawn">Delinquent</span>}
         </div>

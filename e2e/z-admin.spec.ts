@@ -18,8 +18,20 @@ test("admin endpoints reject anonymous, wrong and cron credentials", async ({ re
   expect((await request.get("/api/admin/seed", { headers: auth })).status()).toBe(405);
 });
 
+test("pending list is paginated and validates its parameters (N2)", async ({ request }) => {
+  const page = await (await request.get("/api/admin/claims?limit=1&offset=0", { headers: auth })).json();
+  expect(page).toMatchObject({ total: 1, limit: 1, offset: 0 });
+  expect(page.items).toHaveLength(1);
+  expect((await (await request.get("/api/admin/claims?offset=5", { headers: auth })).json()).items).toEqual([]);
+  expect((await (await request.get("/api/admin/claims?limit=9999", { headers: auth })).json()).limit).toBe(100);
+  for (const bad of ["limit=abc", "limit=-1", "offset=1.5", "limit="]) {
+    expect((await request.get(`/api/admin/claims?${bad}`, { headers: auth })).status(), bad).toBe(400);
+  }
+});
+
 test("lists pending claims with an etag and requires it to decide", async ({ request }) => {
   const list = await (await request.get("/api/admin/claims", { headers: auth })).json();
+  expect(list.total).toBe(1);
   expect(list.items).toHaveLength(1);
   const p = list.items[0];
   expect(p).toMatchObject({ toolName: "New Tool", identity: V.blockLogic.identity });

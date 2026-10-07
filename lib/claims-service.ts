@@ -2,6 +2,7 @@ import {
   checkProofFile,
   evaluateRepoRules,
   evaluateWebRules,
+  MAX_PENDING_PER_IDENTITY,
   parseClaimMessage,
   proofFileUrl,
   verifyClaimSignature,
@@ -16,7 +17,19 @@ export interface ClaimHistory {
   otherClaimants: number;
   /** Other tools of this identity (active or pending) under the same registrable domain. */
   sameDomainClaims?: number;
+  /** Claims of this identity currently waiting for manual review. */
+  pendingClaims?: number;
 }
+
+/** Thrown by the storage layer when saving would exceed the pending limit (checked under a lock). */
+export class PendingLimitError extends Error {
+  constructor() {
+    super("pending claim limit reached");
+    this.name = "PendingLimitError";
+  }
+}
+
+const pendingLimitDetail = `This identity already has ${MAX_PENDING_PER_IDENTITY} claims waiting for review. Wait for a decision before sending more.`;
 
 /** Everything that touches the network or the database, injected so the flow is testable. */
 export interface ClaimsDeps {
@@ -129,6 +142,10 @@ export async function processClaim(
       return { ok: false, checks };
     }
     inReview = outcome.decision === "review";
+    if (inReview && (history.pendingClaims ?? 0) >= MAX_PENDING_PER_IDENTITY) {
+      checks.push({ id: "rules", ok: false, detail: pendingLimitDetail });
+      return { ok: false, checks };
+    }
     checks.push({ id: checkId, ok: true, detail: inReview ? `Needs manual review: ${outcome.reasons.join(" ")}` : undefined });
   } else if (!existing) {
     checks.push({ id: "proof", ok: false, detail: "No claim to withdraw." });
@@ -136,17 +153,24 @@ export async function processClaim(
   }
 
   if (!persist) return { ok: true, inReview, checks };
-  const claim = await deps.saveClaim({
-    toolUrl: parsed.toolUrl,
-    identity: parsed.identity,
-    cluster,
-    message: req.message,
-    signature: req.signature,
-    signedDate: parsed.date,
-    action: parsed.action,
-    pending: inReview,
-    category: req.category,
-    toolName: req.toolName,
-  });
+  let claim: Claim;
+  try {
+    claim = await deps.saveClaim({
+      toolUrl: parsed.toolUrl,
+      identity: parsed.identity,
+      cluster,
+      message: req.message,
+      signature: req.signature,
+      signedDate: parsed.date,
+      action: parsed.action,
+      pending: inReview,
+      category: req.category,
+      toolName: req.toolName,
+    });
+  } catch (err) {
+    if (!(err instanceof PendingLimitError)) throw err;
+    checks.push({ id: "rules", ok: false, detail: pendingLimitDetail });
+    return { ok: false, checks };
+  }
   return { ok: true, inReview, claim, checks };
 }

@@ -155,7 +155,8 @@ export function Leaderboard({ rows, unclaimed }: { rows: LeaderboardRow[]; uncla
                             <Link href={`/v/${encodeURIComponent(r.validator.identity)}`}>{name}</Link>
                           </div>
                           <div className="vsub">
-                            {site ? new URL(site).host : shortKey(r.validator.identity)}
+                            <span className="mono" title={r.validator.identity}>{shortKey(r.validator.identity)}</span>
+                            {site ? <> · {new URL(site).host}</> : null}
                             {MULTI_CLUSTER && (
                               <>
                                 {" "}· <span className="cluster-tag">{CLUSTER_LABEL[r.validator.cluster]}</span>

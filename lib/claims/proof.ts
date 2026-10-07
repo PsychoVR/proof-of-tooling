@@ -18,7 +18,7 @@ export const MAX_PROOF_BYTES = 64 * 1024;
 const GITHUB_REPO = /^github\.com\/([A-Za-z0-9][A-Za-z0-9-]{0,38})\/([A-Za-z0-9._-]{1,100})$/;
 const DOMAIN = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/;
 // Optional path under the domain: plain segments only, no dot-segments, no query or fragment.
-const WEB_PATH = /^(?:\/(?!\.{1,2}(?:\/|$))[A-Za-z0-9._~%+-]{1,100}){0,8}$/;
+const WEB_PATH = /^(?:\/(?!\.{1,2}(?:\/|$))[A-Za-z0-9._~+-]{1,100}){0,8}$/;
 
 /** Host and path of a web tool URL, or null when it is not a supported public domain. */
 function splitWeb(toolUrl: string): { host: string; domain: string } | null {

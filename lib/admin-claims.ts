@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { claimDecisions, claims, tools } from "@/db/schema";
@@ -55,9 +55,23 @@ const selectPending = () =>
     .from(claims)
     .innerJoin(tools, eq(tools.id, claims.toolId));
 
-export async function listPendingClaims(): Promise<(PendingClaim & { etag: string })[]> {
-  const rows = await selectPending().where(eq(claims.status, "pending")).orderBy(claims.id);
-  return rows.map((r) => ({ ...r, etag: claimEtag(r) }));
+export const DEFAULT_PAGE_SIZE = 50;
+export const MAX_PAGE_SIZE = 100;
+
+export interface PendingPage {
+  items: (PendingClaim & { etag: string })[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+/** Oldest pending claims first, one page at a time. */
+export async function listPendingClaims(opts: { limit?: number; offset?: number } = {}): Promise<PendingPage> {
+  const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, Math.floor(opts.limit ?? DEFAULT_PAGE_SIZE)));
+  const offset = Math.max(0, Math.floor(opts.offset ?? 0));
+  const [{ total }] = await getDb().select({ total: count() }).from(claims).where(eq(claims.status, "pending"));
+  const rows = await selectPending().where(eq(claims.status, "pending")).orderBy(claims.id).limit(limit).offset(offset);
+  return { items: rows.map((r) => ({ ...r, etag: claimEtag(r) })), total, limit, offset };
 }
 
 export const adminDbDeps: AdminClaimsDeps = {
@@ -133,8 +147,13 @@ export async function handleDecision(req: Request, rawId: string, decision: Deci
 
 export async function handleListPending(req: Request) {
   if (!adminAuthorized(req.headers.get("authorization"))) return unauthorized();
+  const sp = new URL(req.url).searchParams;
+  const num = (name: string) => (sp.has(name) && /^\d{1,6}$/.test(sp.get(name)!) ? Number(sp.get(name)) : undefined);
+  if ((sp.has("limit") && num("limit") === undefined) || (sp.has("offset") && num("offset") === undefined)) {
+    return NextResponse.json({ error: "invalid pagination" }, { status: 400 });
+  }
   try {
-    return NextResponse.json({ items: await listPendingClaims() });
+    return NextResponse.json(await listPendingClaims({ limit: num("limit"), offset: num("offset") }));
   } catch (err) {
     console.error("admin list failed:", err instanceof Error ? err.message : "unknown error");
     return NextResponse.json({ error: "failed" }, { status: 500 });

@@ -11,14 +11,14 @@ type Db = ReturnType<typeof getDb>;
 export const CLI_IDENTITY = "21CzjGL6u9LircpHKpRH9myUuRD634ZYXaf1ncqQLhwh";
 
 export const DEV_VALIDATORS = {
-  pumpkin: { identity: "MASi45ub7Qe4ZE36UT5G6cU4ud8Fhhe4deS4F3cw9KTA", vote: "b8dLcukC7edhDQ7cn5d4gEYkbUrMWeWQLGsCmrG6dLaY", name: "Pumpkin's Pool", stake: "900000000000000" },
-  validBlocks: { identity: "yNoVKf58ZTBqNAYT3j5qcdsyuMNmPfYetW5v6JXmj54o", vote: "mLidkuVKnRyjP2WPBg8Y4ErK9pGSSxY6BVScJy9uUxcJ", name: "Valid Blocks", stake: "700000000000000" },
-  overclock: { identity: "nTPkyRFA6CAFjF1YveCHK1ATbQgdM9mwZgikp4Wzxrxk", vote: "tcSSSS7XhS4D5EVB8Nf471dAb7Qg25xEgRAhHPfQX88w", name: "Overclock", stake: "500000000000000" },
-  laine: { identity: "YWXXL6A7pNpHXvmBa2EaQAmb2qaLix6mwHaQBPrFbbrZ", vote: "NhFgtsqwDtGuSptFDaYPo22sJXHDmfPVtoPQ6F7FXDNE", name: "Laine", stake: "400000000000000" },
-  blockLogic: { identity: "Xgzgv1XiPti6vj8RsnqDXyCUshN6toSWSp6oBB92AezW", vote: "tiAgufXjPAcc921toi7ap9UxDuxE2HEKZGqeMHbTv94p", name: "Block Logic", stake: "300000000000000" },
+  pumpkin: { identity: "5spY5Lqmm3v5Ass8nnhaDdtJymw1AxTHR1onds5m5HxN", vote: "C2TJptkEXbJFYuSiGZtW46CnW5e6w8hR1zQoPx1pEejD", name: "Pumpkin's Pool", stake: "900000000000000" },
+  validBlocks: { identity: "6qdDDUonoiRaoUnQEfpUTmjVjxj3eVTVLWTuM8gDQjcW", vote: "DKujRQN8qPxvr4jhNgGe9sC3UqWzcx696NedSveo13UC", name: "Valid Blocks", stake: "700000000000000" },
+  overclock: { identity: "Fn6s7tEXcZZeDSqJcKarepa7mmPCrUtBh77fheMBDvWF", vote: "Ec6dU6J2KtNS92rS7WX4s4aDV72nDPMDFPMVyWXFTi8F", name: "Overclock", stake: "500000000000000" },
+  laine: { identity: "EzhAbPqVK1r7dQDUH9QxYNdqjJHijnNfvHRLep9uDhwS", vote: "7qfwF11N6FVBvqCvb9xrY64ap2QT6dLxQSCbPcioZwU7", name: "Laine", stake: "400000000000000" },
+  blockLogic: { identity: "9AAD2Aizt2F3P3sFaq3TJjnKbrgyYujasSNPumC5uRtZ", vote: "HGb2yHbBVncotCHLQFVfLRFbgSjW9d4AdYhemymKtGwM", name: "Block Logic", stake: "300000000000000" },
   // Another validator that copies a real validator name (case and spacing changed) to try to pick up its seed entries.
-  impostor: { identity: "FQR9Dn369GtZESi2WYWRYdDzvS6YFq2mJaTXzRo8jH7u", vote: "5RgvR7j4NGm6YziazEetAf5b3YmDAxeWoeyVKcPwyU9B", name: " overclock ", stake: "100000000000000" },
-  quiet: { identity: "PzWjeuzaTuyZ9bAaZ2xVrCf1rtACAXgo8c4MkaacXsr7", vote: "yc4GDJ3r7ZVc2qz5VMgZfZDmJVZbtXZGmayyHczDvV9T", name: "Quiet Validator", stake: "200000000000000" },
+  impostor: { identity: "DW874TTvzvWBU6k9b6mTcXZ22JPhmMe5CYqx1NwS9jiM", vote: "AUkriLSbDH3oWVFETj6SvyttNZiB4Lcq2gttxwqfmRM8", name: " overclock ", stake: "100000000000000" },
+  quiet: { identity: "8ttnpLECYFDLBoH4vKtCCa31hgis1uPwSViJeXXJ5HzZ", vote: "txWBvLxu5DZN5xVGRzpPKJwrmkAwenoW62FZ7q5WB1P", name: "Quiet Validator", stake: "200000000000000" },
 } as const;
 
 const SIG = "1".repeat(88); // placeholder: stored claims are not re-verified by the read paths

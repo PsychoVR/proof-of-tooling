@@ -75,6 +75,29 @@ describe("processClaim for web tools", () => {
     expect(r).toMatchObject({ ok: true, inReview: true });
   });
 
+  it("refuses a new claim that would go to review when the identity already has 3 waiting (N2)", async () => {
+    const s = setup({ identityClaimsLast24h: 6, pendingClaims: 3 });
+    const r = await processClaim(msg("a.example.com"), s.deps, true);
+    expect(r.ok).toBe(false);
+    expect(r.checks.at(-1)).toMatchObject({ id: "rules", ok: false });
+    expect(r.checks.at(-1)?.detail).toContain("3 claims waiting for review");
+    expect(s.saveClaim).not.toHaveBeenCalled();
+    // below the cap it is queued as usual, and claims that do not need review are never blocked by it
+    expect((await processClaim(msg("b.example.com"), setup({ identityClaimsLast24h: 6, pendingClaims: 2 }).deps, false)).inReview).toBe(true);
+    expect((await processClaim(msg("c.example.com"), setup({ pendingClaims: 3 }).deps, false)).ok).toBe(true);
+  });
+
+  it("reports the limit when the storage layer hits it under its lock", async () => {
+    const { PendingLimitError } = await import("@/lib/claims-service");
+    const s = setup({ identityClaimsLast24h: 6 });
+    s.saveClaim.mockRejectedValueOnce(new PendingLimitError());
+    const r = await processClaim(msg("a.example.com"), s.deps, true);
+    expect(r.ok).toBe(false);
+    expect(r.checks.at(-1)).toMatchObject({ id: "rules", ok: false });
+    s.saveClaim.mockRejectedValueOnce(new Error("db down"));
+    await expect(processClaim(msg("b.example.com"), s.deps, true)).rejects.toThrow("db down");
+  });
+
   it("treats a missing sameDomainClaims as zero", async () => {
     const s = setup();
     const deps = { ...s.deps, getHistory: async () => ({ existing: null, identityClaimsLast24h: 0, otherClaimants: 0 }) };

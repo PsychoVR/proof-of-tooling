@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { StatusPill } from "@/components/StatusPill";
 import { toolDisplayUrl } from "@/lib/claims/message";
 import { getToolBySlug } from "@/lib/queries";
+import { parseSlugParam } from "@/lib/ui/params";
 import type { ToolWithClaims } from "@/lib/types";
 import { formatDate, safeHttpUrl, shortKey, toolPillStatus } from "@/lib/ui/format";
 
@@ -18,14 +19,14 @@ function usersOf(tool: ToolWithClaims): { identity: string | null; name: string 
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { slug } = await params;
-  const tool = await getToolBySlug(decodeURIComponent(slug));
+  const slug = parseSlugParam((await params).slug);
+  const tool = slug ? await getToolBySlug(slug) : null;
   return { title: tool ? tool.name : "Tool not found" };
 }
 
 export default async function ToolPage({ params }: Props) {
-  const { slug } = await params;
-  const tool = await getToolBySlug(decodeURIComponent(slug));
+  const slug = parseSlugParam((await params).slug);
+  const tool = slug ? await getToolBySlug(slug) : null;
   if (!tool) notFound();
   const users = usersOf(tool);
   const href = safeHttpUrl(toolDisplayUrl(tool.url));
@@ -73,6 +74,9 @@ export default async function ToolPage({ params }: Props) {
                     <Link className="linkplain" href={`/v/${encodeURIComponent(u.identity)}`}>
                       {u.name?.trim() || shortKey(u.identity)}
                     </Link>
+                  ) : null}
+                  {u.identity ? (
+                    <span className="vsub mono" title={u.identity}>{shortKey(u.identity)}</span>
                   ) : null}
                   {u.identity ? <StatusPill status={toolPillStatus(tool, u.identity)} /> : <span className="vsub">Unclaimed · built by {u.name}</span>}
                 </li>

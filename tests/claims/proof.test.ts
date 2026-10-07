@@ -40,6 +40,8 @@ describe("proofFileUrl", () => {
     "example.com/a/./b",
     "example.com/a//b",
     "example.com/a b",
+    "example.com/f%6fo", // percent-encoded paths would alias another tool
+    "example.com/%2e%2e/x",
     "example.com/a?x=1",
     "example.com/a#frag",
     "example.com/" + "a/".repeat(9),

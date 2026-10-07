@@ -126,6 +126,24 @@ test.describe("profiles and tools", () => {
     expect((await page.goto(`/v/${"1".repeat(44)}`))?.status()).toBe(404);
     expect((await page.goto("/t/does-not-exist"))?.status()).toBe(404);
   });
+
+  test("identities that are not public keys give a clean 404, not a 500 (N3)", async ({ request }) => {
+    for (const bad of ["%C3%A9", "%E0%A4%A", "0".repeat(44), "1".repeat(31), `${V.overclock.identity}x`, "..%2F..%2Fetc", "%3Cscript%3E"]) {
+      expect((await request.get(`/v/${bad}`)).status(), `/v/${bad}`).toBe(404);
+    }
+    for (const bad of ["%E0%A4%A", "UPPER", "a%20b"]) expect((await request.get(`/t/${bad}`)).status(), `/t/${bad}`).toBe(404);
+  });
+
+  test("the short identity sits next to validator names in the ranking, tool page and profile (N4)", async ({ page }) => {
+    const short = (id: string) => `${id.slice(0, 6)}…${id.slice(-4)}`;
+    await page.goto("/");
+    await expect(page.locator("tbody tr", { hasText: "Pumpkin's Pool" })).toContainText(short(V.pumpkin.identity));
+    await expect(page.locator("tbody tr", { hasText: "Overclock" })).toContainText(short(V.overclock.identity));
+    await page.goto("/t/watchtower");
+    await expect(page.locator(".list li", { hasText: "Pumpkin's Pool" })).toContainText(short(V.pumpkin.identity));
+    await page.goto(`/v/${V.overclock.identity}`);
+    await expect(page.locator(".detail-head")).toContainText(short(V.overclock.identity));
+  });
 });
 
 test.describe("registry", () => {

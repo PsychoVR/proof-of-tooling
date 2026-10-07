@@ -3,6 +3,7 @@ import { and, count, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { claimDecisions, claims, tools } from "@/db/schema";
+import { authGate } from "@/lib/auth-throttle";
 import { adminAuthorized } from "@/lib/admin-auth";
 import { checkProofFile } from "@/lib/claims";
 import { resolveTxt } from "@/lib/dns-txt";
@@ -122,8 +123,6 @@ export async function decideClaim(
   return { ok: true, id, status: decision === "approve" ? "active" : "rejected" };
 }
 
-const unauthorized = () => NextResponse.json({ error: "unauthorized" }, { status: 401 });
-
 const HTTP: Record<Exclude<DecisionResult, { ok: true }>["code"], { status: number; error: string }> = {
   not_found: { status: 404, error: "claim is not pending" },
   precondition_required: { status: 428, error: "If-Match header with the claim etag is required" },
@@ -132,7 +131,8 @@ const HTTP: Record<Exclude<DecisionResult, { ok: true }>["code"], { status: numb
 };
 
 export async function handleDecision(req: Request, rawId: string, decision: Decision, deps?: AdminClaimsDeps) {
-  if (!adminAuthorized(req.headers.get("authorization"))) return unauthorized();
+  const denied = authGate(req, adminAuthorized);
+  if (denied) return denied;
   if (!/^\d{1,9}$/.test(rawId)) return NextResponse.json({ error: "invalid id" }, { status: 400 });
   const actor = sanitizeText(req.headers.get("x-admin-actor"), 64) ?? "admin";
   try {
@@ -147,7 +147,8 @@ export async function handleDecision(req: Request, rawId: string, decision: Deci
 }
 
 export async function handleListPending(req: Request) {
-  if (!adminAuthorized(req.headers.get("authorization"))) return unauthorized();
+  const denied = authGate(req, adminAuthorized);
+  if (denied) return denied;
   const sp = new URL(req.url).searchParams;
   const num = (name: string) => (sp.has(name) && /^\d{1,6}$/.test(sp.get(name)!) ? Number(sp.get(name)) : undefined);
   if ((sp.has("limit") && num("limit") === undefined) || (sp.has("offset") && num("offset") === undefined)) {

@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
+import { authGate } from "@/lib/auth-throttle";
 import { cronAuthorized } from "@/lib/cron-auth";
 
 export const dynamic = "force-dynamic";
@@ -23,9 +24,8 @@ async function appliedTimestamps(db: Db): Promise<Set<number>> {
 }
 
 export async function POST(req: Request) {
-  if (!cronAuthorized(req.headers.get("authorization"))) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
+  const denied = authGate(req, cronAuthorized);
+  if (denied) return denied;
   try {
     const db = getDb();
     const journal = JSON.parse(await readFile(path.join(MIGRATIONS_FOLDER, "meta", "_journal.json"), "utf8")) as {
@@ -37,7 +37,7 @@ export async function POST(req: Request) {
     const applied = journal.entries.filter((e) => after.has(e.when) && !before.has(e.when)).map((e) => e.tag);
     return NextResponse.json({ ok: true, applied, total: journal.entries.length });
   } catch (err) {
-    console.error("migrate failed", err);
+    console.error("migrate failed:", err instanceof Error ? err.message : "unknown error");
     return NextResponse.json({ ok: false, error: "migration failed" }, { status: 500 });
   }
 }

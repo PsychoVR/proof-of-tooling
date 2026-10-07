@@ -65,6 +65,15 @@ Other scripts: `npm run build`, `npm run test`, `npm run lint`, `npm run db:gene
 
 Check: `GET /api/health` returns `"db": true`, and `lastHeartbeat` advances on its own.
 
+### Client IP and rate limiting
+
+Rate limits are keyed by client IP. The first `X-Forwarded-For` value is client-controlled and is never trusted. Pick one of the options below depending on what your proxy sets:
+
+- `TRUSTED_IP_HEADER=x-real-ip` (or whichever header your proxy sets with the real client address). Used when it holds a valid IP.
+- `TRUSTED_PROXY_HOPS=<n>` (default `1`): number of trusted proxies in front of the app. The client IP is the `X-Forwarded-For` entry that many positions from the right.
+
+If the IP cannot be determined, the request falls into a single shared bucket with a stricter limit. Claim requests are additionally limited per claimed identity.
+
 ## License
 
 MIT

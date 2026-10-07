@@ -81,8 +81,9 @@ describe("admin HTTP handlers", () => {
     process.env.ADMIN_SECRET = ADMIN;
     process.env.DATABASE_URL = "mysql://u:p@localhost:3306/db";
   });
+  let n = 0; // a distinct client IP per request keeps the failed-auth throttle out of these tests
   const req = (auth?: string, extra: Record<string, string> = {}) =>
-    new Request("http://x/api/admin", { method: "POST", headers: { ...(auth ? { authorization: auth } : {}), ...extra } });
+    new Request("http://x/api/admin", { method: "POST", headers: { "x-forwarded-for": `40.0.${++n >> 8}.${n & 255}`, ...(auth ? { authorization: auth } : {}), ...extra } });
 
   it("rejects missing, wrong and cron credentials before touching anything", async () => {
     const d = deps();

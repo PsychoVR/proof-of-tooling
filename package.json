@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build --webpack && node scripts/check-prod-bundle.mjs",
+    "build": "node scripts/guard-no-e2e.mjs && next build --webpack && node scripts/check-prod-bundle.mjs",
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run",

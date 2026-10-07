@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { claims, tools } from "@/db/schema";
 import { pruneOrphanTools } from "@/jobs/prune";
+import { pruneClaimFailures } from "@/lib/claim-failures";
 import { checkProofFile, proofFileUrl, type Fetcher, type TxtResolver } from "@/lib/claims";
 import { resolveTxt } from "@/lib/dns-txt";
 import { safeFetcher } from "@/lib/safe-fetch";
@@ -144,7 +145,11 @@ export async function runReverify(overrides: Partial<ReverifyDeps> = {}): Promis
     await Promise.all(list.slice(i, i + size).map(one));
   }
   try {
-    report.pruned = await (deps.prune ?? (() => pruneOrphanTools(now)))();
+    report.pruned = await (deps.prune ?? (async () => {
+      const orphans = await pruneOrphanTools(now);
+      await pruneClaimFailures(now);
+      return orphans;
+    }))();
   } catch {
     // Housekeeping only: a failure here must not hide the verification results.
   }

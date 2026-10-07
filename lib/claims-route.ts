@@ -6,6 +6,7 @@ import { processClaim } from "@/lib/claims-service";
 import { createRateLimiter } from "@/lib/rate-limit";
 import { sanitizeText } from "@/lib/text";
 import { getClientIp } from "@/lib/client-ip";
+import { failureReason, INTERNAL_REASON } from "@/lib/claim-failures";
 import { enforceIpLimits, logWouldBlock } from "@/lib/ip-limit-mode";
 import { parseClaimMessage, verifyClaimSignature } from "@/lib/claims";
 
@@ -72,13 +73,18 @@ export async function handleClaimRequest(req: Request, persist: boolean) {
     if (signed && !(persist ? allowWriteIdentity : allowCheckIdentity)(identity)) return tooMany();
   }
   let result;
+  const deps = createClaimsDeps();
+  const kind = persist ? "register" : "check";
   try {
-    result = await processClaim(body.data, createClaimsDeps(), persist);
+    result = await processClaim(body.data, deps, persist);
   } catch (err) {
+    await deps.recordFailure?.(kind, INTERNAL_REASON);
     // Never echo internals (SQL, stack traces); the message alone is enough to diagnose.
     console.error("claim request failed:", err instanceof Error ? err.message : "unknown error");
     return NextResponse.json({ error: "internal error" }, { status: 500 });
   }
+  const reason = failureReason(result);
+  if (reason) await deps.recordFailure?.(kind, reason);
   // A dry run reports failed steps in the body; only a real registration attempt is an HTTP error.
   return NextResponse.json(result, { status: result.ok || !persist ? 200 : 422 });
 }

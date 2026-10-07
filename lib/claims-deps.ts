@@ -17,6 +17,7 @@ import {
   proofFileUrl,
 } from "@/lib/claims";
 import { readCounters } from "@/lib/claims-counters";
+import { recordClaimFailure } from "@/lib/claim-failures";
 import { PendingLimitError, RuleRejectedError, ToolQuotaError, UnknownValidatorError, type ClaimsDeps } from "@/lib/claims-service";
 import type { Claim, ClaimStatus, Cluster } from "@/lib/types";
 
@@ -177,6 +178,7 @@ const slugOf = (url: string) => url.toLowerCase().replace(/[^a-z0-9]+/g, "-").re
 export function createClaimsDeps(): ClaimsDeps {
   return {
     now: () => new Date(),
+    recordFailure: recordClaimFailure,
     fetcher: safeFetcher,
     resolveTxt,
     getRepoMetadata,

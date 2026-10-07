@@ -123,3 +123,18 @@ export const claimDecisions = mysqlTable(
   },
   (t) => [index("claim_decisions_claim_idx").on(t.claimId)],
 );
+
+/**
+ * Claim attempts that did not pass, to see where people get stuck. Only the failing step and the
+ * kind of request are stored: no identity, no IP, no URL. Rows older than 30 days are pruned.
+ */
+export const claimFailures = mysqlTable(
+  "claim_failures",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    reason: varchar("reason", { length: 32 }).notNull(),
+    kind: mysqlEnum("kind", ["check", "register"]).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("claim_failures_created_idx").on(t.createdAt)],
+);

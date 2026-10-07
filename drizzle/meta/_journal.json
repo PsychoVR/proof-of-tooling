@@ -57,6 +57,13 @@
       "when": 1791500000000,
       "tag": "0007_lowercase_github_urls",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1791600000000,
+      "tag": "0008_claim_failures",
+      "breakpoints": true
     }
   ]
 }

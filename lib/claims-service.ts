@@ -93,6 +93,8 @@ export interface ClaimsDeps {
      */
     recheck?: { now: Date; repo?: RepoMetadata };
   }) => Promise<Claim>;
+  /** Counts a failed attempt by the step that stopped it (statistics only; optional). */
+  recordFailure?: (kind: "check" | "register", reason: string) => Promise<void>;
 }
 
 /**

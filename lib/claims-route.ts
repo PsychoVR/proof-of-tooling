@@ -24,15 +24,36 @@ const allowCheckIdentity = createRateLimiter(30, 60_000);
 
 const tooMany = () => NextResponse.json({ error: "rate limited" }, { status: 429 });
 
+/** Reads the body as text, giving up (null) as soon as it passes `max` bytes, even without a Content-Length. */
+async function readBodyCapped(req: Request, max: number): Promise<string | null> {
+  if (!req.body) return "";
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > max) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
 export async function handleClaimRequest(req: Request, persist: boolean) {
   const ip = getClientIp(req.headers);
   if (!(ip ? allow(`${persist ? "w" : "c"}:${ip}`) : allowUnknown(persist ? "w" : "c"))) return tooMany();
   if (Number(req.headers.get("content-length") ?? 0) > MAX_BODY_BYTES) {
     return NextResponse.json({ error: "payload too large" }, { status: 413 });
   }
+  const text = await readBodyCapped(req, MAX_BODY_BYTES);
+  if (text === null) return NextResponse.json({ error: "payload too large" }, { status: 413 });
   let json: unknown;
   try {
-    json = await req.json();
+    json = JSON.parse(text);
   } catch {
     return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }

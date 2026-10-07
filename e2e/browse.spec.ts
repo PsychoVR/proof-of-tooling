@@ -27,6 +27,11 @@ test.describe("home and leaderboard", () => {
     await expect(panel.locator("li", { hasText: "Alpenglow Explorer" })).toContainText("Unclaimed · built by Valid Blocks");
     await expect(panel.locator("li", { hasText: "Stakewiz" })).toContainText("Unclaimed · built by Laine");
     await expect(panel.locator('a[href^="/v/"]')).toHaveCount(0); // no profile links
+    // every attribution links to its public source page
+    const source = panel.locator("li", { hasText: "Alpenglow Explorer" }).getByRole("link", { name: "Source" });
+    await expect(source).toHaveAttribute("href", /^https:\/\/.+/);
+    await expect(source).toHaveAttribute("rel", /noopener/);
+    await expect(panel.getByRole("link", { name: "Source" })).toHaveCount(4);
     await expect(panel.locator('a[href^="/t/"]')).toHaveCount(4); // only tool pages
   });
 
@@ -114,6 +119,7 @@ test.describe("profiles and tools", () => {
     await page.goto("/t/alpenglow-explorer");
     await expect(page.getByRole("heading", { name: "Alpenglow Explorer", level: 1 })).toBeVisible();
     await expect(page.getByText("Unclaimed · built by Valid Blocks")).toBeVisible();
+    await expect(page.locator("main").getByRole("link", { name: "Source" })).toHaveAttribute("href", /^https:\/\/.+/);
     await expect(page.locator('main a[href^="/v/"]')).toHaveCount(0);
   });
 

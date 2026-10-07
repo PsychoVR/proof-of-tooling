@@ -7,6 +7,7 @@ import { CATEGORIES, type Category, type Cluster, type LeaderboardRow, type Tool
 import { CLUSTER_LABEL, displayName, safeHttpUrl, shortKey } from "@/lib/ui/format";
 import { Avatar } from "./Avatar";
 import { StatusPill } from "./StatusPill";
+import { UnclaimedBy } from "./UnclaimedBy";
 import { ToolChip } from "./ToolChip";
 
 type StatusFilter = "all" | "claimed" | "unclaimed";
@@ -194,7 +195,7 @@ export function Leaderboard({ rows, unclaimed }: { rows: LeaderboardRow[]; uncla
             {visibleUnclaimed.map((t) => (
               <li key={t.id}>
                 <ToolChip tool={t} />
-                <span className="vsub">Unclaimed · built by {t.owner?.name ?? "an unknown validator"}</span>
+                <UnclaimedBy name={t.owner?.name ?? "an unknown validator"} sourceUrl={t.owner?.sourceUrl ?? null} />
               </li>
             ))}
           </ul>

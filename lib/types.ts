@@ -79,6 +79,8 @@ export interface Endorsement {
 export interface ToolOwner {
   name: string;
   identity: string | null;
+  /** Public page that ties an unclaimed tool to its builder (seed entries only), so the attribution can be audited. */
+  sourceUrl: string | null;
 }
 
 export interface ToolWithClaims extends Tool {

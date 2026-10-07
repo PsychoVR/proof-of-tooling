@@ -59,12 +59,25 @@ describe("buildToolsWithClaims", () => {
       [{ identity: "A", cluster: "mainnet", name: "Alpha" }],
     );
     expect(out.map((t) => t.status)).toEqual(["claimed", "unclaimed", "unclaimed"]);
-    expect(out[0].owner).toEqual({ name: "Alpha", identity: "A" });
-    expect(out[1].owner).toEqual({ name: "Alpha", identity: "A" });
+    expect(out[0].owner).toEqual({ name: "Alpha", identity: "A", sourceUrl: null });
+    expect(out[1].owner).toEqual({ name: "Alpha", identity: "A", sourceUrl: null });
     expect(out[2].owner).toBeNull();
     expect(out[0].claimedBy).toEqual([{ identity: "A", cluster: "mainnet", name: "Alpha" }]);
     expect(out[1].claims).toHaveLength(1);
     expect(out[2].claims).toHaveLength(0);
+  });
+
+  it("an unclaimed tool carries the seed owner and its source page; a claimed one does not", () => {
+    const seeds = [
+      { toolId: 1, validatorName: "Seed A", sourceUrl: "https://a.example/page" },
+      { toolId: 2, validatorName: "Seed B", sourceUrl: "https://b.example/page" },
+    ];
+    const out = buildToolsWithClaims([tool(1), tool(2)], [crow(2, 2, "A")], [{ identity: "A", cluster: "mainnet", name: null }], seeds);
+    expect(out[0].owner).toEqual({ name: "Seed A", identity: null, sourceUrl: "https://a.example/page" });
+    expect(out[1].owner).toEqual({ name: "Seed B", identity: "A", sourceUrl: null });
+    // a stale claim does not make the tool claimed, so its seed attribution stays auditable
+    const stale = buildToolsWithClaims([tool(2)], [crow(2, 2, "A", "stale")], [{ identity: "A", cluster: "mainnet", name: null }], seeds);
+    expect(stale[0].owner).toEqual({ name: "Seed B", identity: "A", sourceUrl: "https://b.example/page" });
   });
 });
 
@@ -114,9 +127,8 @@ describe("buildLeaderboard", () => {
 
 describe("seed data", () => {
   it("has unique slugs and urls", () => {
-    expect(SEED_TOOLS).toHaveLength(7);
-    expect(new Set(SEED_TOOLS.map((s) => s.slug)).size).toBe(7);
-    expect(new Set(SEED_TOOLS.map((s) => s.url)).size).toBe(7);
+    expect(new Set(SEED_TOOLS.map((s) => s.slug)).size).toBe(SEED_TOOLS.length);
+    expect(new Set(SEED_TOOLS.map((s) => s.url)).size).toBe(SEED_TOOLS.length);
   });
 });
 

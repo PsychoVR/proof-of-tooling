@@ -34,7 +34,7 @@ async function withClaims(toolRows: ToolRow[]): Promise<ToolWithClaims[]> {
     .from(claims)
     .where(and(inArray(claims.toolId, toolRows.map((t) => t.id)), inArray(claims.status, [...DISPLAY_CLAIM_STATUSES])));
   const seeds = await db
-    .select({ toolId: seedEntries.toolId, validatorName: seedEntries.validatorName })
+    .select({ toolId: seedEntries.toolId, validatorName: seedEntries.validatorName, sourceUrl: seedEntries.sourceUrl })
     .from(seedEntries)
     .where(inArray(seedEntries.toolId, toolRows.map((t) => t.id)));
   const ids = [...new Set(claimRows.map((c) => c.identity))];

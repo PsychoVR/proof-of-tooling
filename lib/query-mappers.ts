@@ -82,7 +82,7 @@ export type ValidatorName = { identity: string; cluster: Cluster; name: string |
 
 const nameKey = (identity: string, cluster: string) => `${identity}:${cluster}`;
 
-export type SeedRef = { toolId: number; validatorName: string };
+export type SeedRef = { toolId: number; validatorName: string; sourceUrl?: string };
 
 export function buildToolsWithClaims(
   toolRows: ToolRow[],
@@ -90,8 +90,10 @@ export function buildToolsWithClaims(
   names: ValidatorName[],
   seeds: SeedRef[] = [],
 ): ToolWithClaims[] {
-  const seedByTool = new Map<number, string>();
-  for (const sd of seeds) if (!seedByTool.has(sd.toolId)) seedByTool.set(sd.toolId, sd.validatorName);
+  const seedByTool = new Map<number, { name: string; sourceUrl: string | null }>();
+  for (const sd of seeds) {
+    if (!seedByTool.has(sd.toolId)) seedByTool.set(sd.toolId, { name: sd.validatorName, sourceUrl: sd.sourceUrl ?? null });
+  }
   const nameMap = new Map(names.map((n) => [nameKey(n.identity, n.cluster), n.name]));
   const byTool = new Map<number, Claim[]>();
   for (const c of claimRows) {
@@ -104,12 +106,13 @@ export function buildToolsWithClaims(
     const cl = byTool.get(t.id) ?? [];
     const active = cl.filter((c) => c.status === "active");
     const lead = active[0] ?? cl.find((c) => c.status === "stale"); // pending claims never name an owner
-    const seedName = seedByTool.get(t.id);
+    const seed = seedByTool.get(t.id);
+    const seedName = seed?.name;
     const leadName = lead ? (nameMap.get(nameKey(lead.identity, lead.cluster)) ?? null) : null;
     const owner: ToolWithClaims["owner"] = lead
-      ? { name: leadName ?? seedName ?? lead.identity, identity: lead.identity }
-      : seedName
-        ? { name: seedName, identity: null }
+      ? { name: leadName ?? seedName ?? lead.identity, identity: lead.identity, sourceUrl: active.length === 0 ? (seed?.sourceUrl ?? null) : null }
+      : seed
+        ? { name: seed.name, identity: null, sourceUrl: seed.sourceUrl }
         : null;
     return {
       ...mapTool(t),

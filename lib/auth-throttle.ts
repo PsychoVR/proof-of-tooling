@@ -18,14 +18,16 @@ export function warnIfSecretsShared(env: Record<string, string | undefined> = pr
 
 /**
  * Bearer-auth gate for /api/admin/* and /api/cron/*. Returns the error response to send, or null when
- * the caller is authorized. Failed attempts are counted per client IP: after 10 in a minute the IP gets
- * 429 even for a correct secret until the window passes, which makes online guessing impractical.
+ * the caller is authorized. Failed attempts are counted per client IP: after 10 in a minute further
+ * wrong secrets get 429 until the window passes. A correct secret is never blocked by that throttle.
  */
 export function authGate(req: Request, authorized: (header: string | null) => boolean): NextResponse | null {
   warnIfSecretsShared();
   const key = getClientIp(req.headers) ?? "unknown";
-  if (failures.exhausted(key)) return NextResponse.json({ error: "too many attempts" }, { status: 429 });
+  // The secret is checked first: a correct one always passes, so a shared IP bucket (or an
+  // attacker exhausting it) cannot lock the operator out. Only failures are counted.
   if (authorized(req.headers.get("authorization"))) return null;
+  if (failures.exhausted(key)) return NextResponse.json({ error: "too many attempts" }, { status: 429 });
   failures(key);
   return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 }

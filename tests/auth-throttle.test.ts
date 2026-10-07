@@ -13,10 +13,10 @@ describe("authGate", () => {
     expect(authGate(req("30.0.0.1", "Bearer right"), check)).toBeNull();
   });
 
-  it("answers 401 for failures, then 429 after 10 in a minute even for a correct secret", async () => {
+  it("answers 401 for failures, then 429 for wrong secrets after 10 in a minute; a correct secret still passes (L2)", async () => {
     for (let i = 0; i < 10; i++) expect((authGate(req("30.0.0.2"), check))!.status).toBe(401);
     expect(authGate(req("30.0.0.2"), check)!.status).toBe(429);
-    expect(authGate(req("30.0.0.2", "Bearer right"), check)!.status).toBe(429);
+    expect(authGate(req("30.0.0.2", "Bearer right"), check)).toBeNull();
     // Other clients are unaffected.
     expect(authGate(req("30.0.0.3", "Bearer right"), check)).toBeNull();
   });

@@ -32,7 +32,7 @@ export default async function ValidatorPage({ params }: Props) {
     <>
       <p className="crumbs"><Link href="/">Ledger</Link> / Validator</p>
       <div className="detail-head">
-        <Avatar name={name} iconUrl={v.iconUrl} large />
+        <Avatar name={name} large />
         <div>
           <h1 className="page-title" style={{ marginTop: 0 }}>{name}</h1>
           {MULTI_CLUSTER && <span className="cluster-tag">{CLUSTER_LABEL[v.cluster]}</span>}{" "}

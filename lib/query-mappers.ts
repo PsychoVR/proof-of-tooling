@@ -147,18 +147,16 @@ export function buildStats(
   };
 }
 
-export const normName = (s: string | null | undefined) => (s ?? "").trim().toLowerCase();
-
 type LeaderTool = LeaderboardRow["tools"][number];
 
 /**
- * Seed entries are attributed by validator name (they have no identity), so a validator
- * picks them up when its on-chain name matches case-insensitively.
+ * Validators ranked by signed tools. Seed entries are never attributed to a validator (their
+ * names are untrusted free text); a tool only counts for a validator through its own signed
+ * claim. Expired (stale) claims are listed but do not count.
  */
 export function buildLeaderboard(
   validatorRows: ValidatorRow[],
   liveClaims: Pick<ClaimRow, "toolId" | "identity" | "cluster" | "status">[],
-  seeds: SeedRef[],
   toolRows: ToolRow[],
   page: number,
   pageSize: number,
@@ -169,36 +167,22 @@ export function buildLeaderboard(
   for (const c of liveClaims) {
     if (c.status !== "active" && c.status !== "stale") continue;
     const k = nameKey(c.identity, c.cluster);
-    const m = claimsByKey.get(k) ?? claimsByKey.set(k, new Map()).get(k)!;
-    if (c.status === "active" || !m.has(c.toolId)) m.set(c.toolId, c.status === "active" ? "signed" : "stale");
-  }
-  const seedsByName = new Map<string, Set<number>>();
-  for (const s of seeds) {
-    const k = normName(s.validatorName);
-    (seedsByName.get(k) ?? seedsByName.set(k, new Set()).get(k)!).add(s.toolId);
+    const map = claimsByKey.get(k) ?? claimsByKey.set(k, new Map()).get(k)!;
+    if (c.status === "active" || !map.has(c.toolId)) map.set(c.toolId, c.status === "active" ? "signed" : "stale");
   }
 
   const rows: LeaderboardRow[] = [];
   for (const v of validatorRows) {
     const claimed = claimsByKey.get(nameKey(v.identity, v.cluster)) ?? new Map<number, LeaderboardToolStatus>();
-    const seeded = v.name ? (seedsByName.get(normName(v.name)) ?? new Set<number>()) : new Set<number>();
-    const all = new Set([...claimed.keys(), ...seeded]);
     const list: LeaderTool[] = [];
-    for (const id of all) {
+    for (const [id, status] of claimed) {
       const t = toolById.get(id);
-      if (t) {
-        const status = claimed.get(id) ?? "unclaimed";
-        list.push({ id: t.id, slug: t.slug, name: t.name, category: t.category, url: t.url, status });
-      }
+      if (t) list.push({ id: t.id, slug: t.slug, name: t.name, category: t.category, url: t.url, status });
     }
-    if (list.length === 0) continue;
+    const signed = list.filter((t) => t.status === "signed").length;
+    if (signed === 0) continue;
     list.sort((a, b) => a.name.localeCompare(b.name));
-    rows.push({
-      validator: mapValidator(v),
-      toolCount: list.length,
-      claimedCount: list.filter((t) => t.status === "signed").length,
-      tools: list,
-    });
+    rows.push({ validator: mapValidator(v), toolCount: signed, claimedCount: signed, tools: list });
   }
   rows.sort((a, b) => {
     if (b.toolCount !== a.toolCount) return b.toolCount - a.toolCount;

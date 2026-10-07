@@ -1,4 +1,5 @@
 import { clusterRpcUrl } from "@/lib/clusters";
+import { sanitizeText } from "@/lib/text";
 import type { Cluster, Validator } from "@/lib/types";
 
 export const CONFIG_PROGRAM = "Config1111111111111111111111111111111111111";
@@ -8,15 +9,7 @@ export const rpcUrlFor = (cluster: Cluster): string => clusterRpcUrl(cluster);
 
 // ---- untrusted input sanitizers (validator-info is free text written by anyone) ----
 
-// Control chars, zero-width and bidi override/isolate characters.
-const UNSAFE_CHARS = /[\u0000-\u001F\u007F-\u009F​-‏‪-‮⁠-⁩﻿]/g;
-
-export function sanitizeText(input: unknown, max = 255): string | null {
-  if (typeof input !== "string") return null;
-  const cleaned = input.replace(UNSAFE_CHARS, " ").replace(/\s+/g, " ").trim();
-  if (!cleaned) return null;
-  return Array.from(cleaned).slice(0, max).join("");
-}
+export { sanitizeText };
 
 export function sanitizeUrl(input: unknown, opts: { httpsOnly?: boolean } = {}): string | null {
   if (typeof input !== "string") return null;
@@ -110,7 +103,7 @@ export function parseValidatorInfo(accounts: ConfigAccountRaw[]): Map<string, Va
     out.set(idKey.pubkey, {
       name: sanitizeText(cd.name),
       website: sanitizeUrl(cd.website),
-      iconUrl: sanitizeUrl(cd.iconUrl, { httpsOnly: true }),
+      iconUrl: null, // remote icons are never loaded (see components/Avatar.tsx)
     });
   }
   return out;

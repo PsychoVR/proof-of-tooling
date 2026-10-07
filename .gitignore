@@ -7,4 +7,5 @@ next-env.d.ts
 
 # Playwright
 /test-results/
+.next-e2e
 /playwright-report/

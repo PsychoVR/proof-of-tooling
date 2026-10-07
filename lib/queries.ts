@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, max, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, max, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { ENABLED_CLUSTERS, isEnabledCluster } from "@/lib/clusters";
 import { claims, endorsements, seedEntries, tools, validators } from "@/db/schema";
@@ -8,7 +8,6 @@ import {
   buildToolsWithClaims,
   mapEndorsement,
   mapValidator,
-  normName,
   type ClaimRow,
   type ToolRow,
 } from "@/lib/query-mappers";
@@ -72,22 +71,17 @@ export async function getLeaderboard(opts: {
   if (opts.cluster && !isEnabledCluster(opts.cluster)) return { items: [], page, pageSize, total: 0 };
   const db = getDb();
 
-  const [liveClaims, seeds, toolRows] = await Promise.all([
+  const [liveClaims, toolRows] = await Promise.all([
     db
       .select({ toolId: claims.toolId, identity: claims.identity, cluster: claims.cluster, status: claims.status })
       .from(claims)
       .where(inArray(claims.status, [...PUBLIC_CLAIM_STATUSES])),
-    db.select({ toolId: seedEntries.toolId, validatorName: seedEntries.validatorName }).from(seedEntries),
     db.select().from(tools),
   ]);
 
   const identities = [...new Set(liveClaims.map((c) => c.identity))];
-  const seedNames = [...new Set(seeds.map((s) => normName(s.validatorName)))];
-  const match = or(
-    identities.length ? inArray(validators.identity, identities) : undefined,
-    seedNames.length ? inArray(sql`lower(trim(${validators.name}))`, seedNames) : undefined,
-  );
-  if (!match) return { items: [], page, pageSize, total: 0 };
+  if (identities.length === 0) return { items: [], page, pageSize, total: 0 };
+  const match = inArray(validators.identity, identities);
 
   const validatorRows = await db
     .select()
@@ -95,7 +89,7 @@ export async function getLeaderboard(opts: {
     .where(and(opts.cluster ? eq(validators.cluster, opts.cluster) : inArray(validators.cluster, [...ENABLED_CLUSTERS]), match))
     .orderBy(desc(validators.activatedStake));
 
-  const { items, total } = buildLeaderboard(validatorRows, liveClaims, seeds, toolRows, page, pageSize);
+  const { items, total } = buildLeaderboard(validatorRows, liveClaims, toolRows, page, pageSize);
   return { items, page, pageSize, total };
 }
 
@@ -112,20 +106,14 @@ export async function getValidatorProfile(identity: string): Promise<ValidatorPr
     return a.activatedStake > b.activatedStake ? -1 : a.activatedStake < b.activatedStake ? 1 : 0;
   })[0];
 
-  const [claimed, seeded, endorsementRows] = await Promise.all([
+  const [claimed, endorsementRows] = await Promise.all([
     db
       .select({ toolId: claims.toolId })
       .from(claims)
       .where(and(eq(claims.identity, identity), inArray(claims.status, [...DISPLAY_CLAIM_STATUSES]))),
-    best.name
-      ? db
-          .select({ toolId: seedEntries.toolId })
-          .from(seedEntries)
-          .where(sql`lower(trim(${seedEntries.validatorName})) = ${normName(best.name)}`)
-      : Promise.resolve([] as { toolId: number }[]),
     db.select().from(endorsements).where(eq(endorsements.identity, identity)),
   ]);
-  const toolIds = [...new Set([...claimed, ...seeded].map((r) => r.toolId))];
+  const toolIds = [...new Set(claimed.map((r) => r.toolId))];
   const toolRows = toolIds.length ? await db.select().from(tools).where(inArray(tools.id, toolIds)) : [];
 
   return {

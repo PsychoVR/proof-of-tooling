@@ -1,10 +1,16 @@
 import { sql } from "drizzle-orm";
-import { validators as validatorsTable } from "@/db/schema";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { getDb } from "@/db";
 import { CLI_IDENTITY, DEV_VALIDATORS as V, resetDevDb, seedDevData } from "@/db/dev-data";
-import { decideClaim } from "@/lib/admin-claims";
+import { claimDecisions, claims, validators as validatorsTable } from "@/db/schema";
+import { adminDbDeps, decideClaim, listPendingClaims } from "@/lib/admin-claims";
+import { createClaimsDeps } from "@/lib/claims-deps";
+import { processClaim } from "@/lib/claims-service";
 import { getLeaderboard, getRegistry, getStats, getToolBySlug, getTools, getValidatorProfile } from "@/lib/queries";
+import { eq } from "drizzle-orm";
+import cli from "../fixtures/cli-signatures.json";
+
+const rows = async <T>(q: ReturnType<typeof sql>) => (await getDb().execute(q))[0] as unknown as T[];
 
 beforeAll(async () => {
   await resetDevDb();
@@ -18,78 +24,88 @@ afterAll(async () => {
 
 describe("engine", () => {
   it("runs on MariaDB 11.8, like production", async () => {
-    const [rows] = await getDb().execute(sql`SELECT VERSION() AS v`);
-    expect(String((rows as unknown as { v: string }[])[0].v)).toMatch(/^(5\.5\.5-)?11\.8\..*MariaDB|^11\.8\./);
+    const [r] = await rows<{ v: string }>(sql`SELECT VERSION() AS v`);
+    expect(String(r.v)).toMatch(/^(5\.5\.5-)?11\.8\./);
+  });
+});
+
+describe("binary collation on keys and signatures (migration 0003)", () => {
+  it("uses ascii_bin for identity, vote_account and signature columns", async () => {
+    const cols = await rows<{ t: string; c: string; k: string }>(sql`
+      SELECT TABLE_NAME AS t, COLUMN_NAME AS c, COLLATION_NAME AS k FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND COLUMN_NAME IN ('identity', 'vote_account', 'signature') ORDER BY 1, 2`);
+    expect(cols.length).toBe(6);
+    for (const c of cols) expect(c.k, `${c.t}.${c.c}`).toBe("ascii_bin");
+  });
+
+  it("treats keys that differ only by case as different", async () => {
+    const lower = "a".repeat(43) + "b";
+    const upper = "A".repeat(43) + "B";
+    await getDb().insert(validatorsTable).values([
+      { identity: lower, cluster: "mainnet", voteAccount: "v".repeat(44), name: "Lower", activatedStake: BigInt(1) },
+      { identity: upper, cluster: "mainnet", voteAccount: "V".repeat(44), name: "Upper", activatedStake: BigInt(1) },
+    ]);
+    try {
+      expect((await getValidatorProfile(lower))?.validator.name).toBe("Lower");
+      expect((await getValidatorProfile(upper))?.validator.name).toBe("Upper");
+      expect(await getValidatorProfile("a".repeat(43) + "B")).toBeNull(); // mixed case matches neither
+    } finally {
+      await getDb().execute(sql`DELETE FROM validators WHERE identity IN (${lower}, ${upper})`);
+    }
   });
 });
 
 describe("getStats", () => {
-  it("counts only active claims as claimed and never pending", async () => {
+  it("counts seeded and actively claimed tools, never pending ones", async () => {
     const s = await getStats();
-    expect(s).toMatchObject({ toolsTotal: 7, toolsClaimed: 1, toolsUnclaimed: 6, validatorsWithTools: 1, validatorsTotal: 7 });
+    expect(s).toMatchObject({ toolsTotal: 7, toolsClaimed: 3, toolsUnclaimed: 4, validatorsWithTools: 2, validatorsTotal: 8 });
     expect(Object.values(s.byCategory).reduce((a, b) => a + b, 0)).toBe(7);
     expect(s.byCategory.Explorer).toBe(3);
     expect(s.byCategory.Library).toBe(0); // the pending-only tool is not counted
   });
 });
 
-describe("getLeaderboard", () => {
-  it("lists validators with a claim or a name-matched seed, ranked by tool count then stake", async () => {
+describe("getLeaderboard: only signed claims rank a validator", () => {
+  it("ranks validators by signed tools and ignores seeds, stale and pending claims", async () => {
     const lb = await getLeaderboard({});
-    expect(lb.total).toBe(5);
-    expect(lb.items.map((r) => r.validator.name)).toEqual(["Pumpkin's Pool", "Valid Blocks", "Overclock", "Laine", "Block Logic"]);
-    const byName: Record<string, (typeof lb.items)[number]> = Object.fromEntries(lb.items.map((r) => [r.validator.name ?? "", r]));
-    expect(byName["Pumpkin's Pool"].toolCount).toBe(2);
-    expect(byName["Overclock"].tools.map((t) => t.status)).toEqual(["signed"]);
-    expect(byName["Overclock"].claimedCount).toBe(1);
-    expect(byName["Laine"].tools.map((t) => t.status)).toEqual(["stale"]);
-    // pending claims never count: Block Logic only shows its seeded tool
-    expect(byName["Block Logic"].tools.map((t) => [t.name, t.status])).toEqual([["validators.app", "unclaimed"]]);
+    expect(lb.total).toBe(2);
+    expect(lb.items.map((r) => [r.validator.name, r.toolCount])).toEqual([["Pumpkin's Pool", 2], ["Overclock", 1]]);
+    expect(lb.items[0].tools.map((t) => t.status)).toEqual(["signed", "signed"]);
     expect(lb.items[0].validator.activatedStake).toBe("900000000000000");
   });
 
-  it("excludes validators without tools and filters by cluster", async () => {
-    const names = (await getLeaderboard({})).items.map((r) => r.validator.name);
-    expect(names).not.toContain("Quiet Validator");
-    expect(names).not.toContain("SunshineVR");
-    expect((await getLeaderboard({ cluster: "testnet" })).total).toBe(0); // not enabled in phase 1
-    expect((await getLeaderboard({ cluster: "mainnet" })).total).toBe(5);
+  it("does not hand seed entries to a validator that copies another one's name", async () => {
+    const lb = await getLeaderboard({});
+    expect(lb.items.map((r) => r.validator.identity)).not.toContain(V.impostor.identity);
+    const profile = await getValidatorProfile(V.impostor.identity);
+    expect(profile?.validator.name).toBe(" overclock ");
+    expect(profile?.tools).toEqual([]);
+    // the real Overclock only has what it signed, and stale-only validators are not ranked
+    expect((await getValidatorProfile(V.overclock.identity))?.tools.map((t) => t.name)).toEqual(["Mithril"]);
+    expect(lb.items.map((r) => r.validator.name)).not.toContain("Laine");
   });
 
-  it("paginates", async () => {
-    const p = await getLeaderboard({ page: 2, pageSize: 2 });
-    expect(p).toMatchObject({ page: 2, pageSize: 2, total: 5 });
-    expect(p.items.map((r) => r.validator.name)).toEqual(["Overclock", "Laine"]);
+  it("restricts to enabled clusters and paginates", async () => {
+    expect((await getLeaderboard({ cluster: "testnet" })).total).toBe(0);
+    const p = await getLeaderboard({ page: 2, pageSize: 1 });
+    expect(p).toMatchObject({ page: 2, pageSize: 1, total: 2 });
+    expect(p.items[0].validator.name).toBe("Overclock");
   });
 });
 
 describe("getValidatorProfile", () => {
-  it("works for a validator with no tools", async () => {
+  it("works for a validator with no tools, and returns null for unknown identities", async () => {
     const p = await getValidatorProfile(V.quiet.identity);
-    expect(p?.validator.name).toBe("Quiet Validator");
     expect(p?.tools).toEqual([]);
-  });
-
-  it("returns null for unknown identities", async () => {
     expect(await getValidatorProfile("1".repeat(44))).toBeNull();
   });
 
-  it("shows seeded, signed and pending tools with owners", async () => {
-    const oc = await getValidatorProfile(V.overclock.identity);
-    expect(oc?.tools).toHaveLength(1);
-    expect(oc?.tools[0]).toMatchObject({ name: "Mithril", status: "claimed", owner: { identity: V.overclock.identity } });
+  it("lists signed and pending tools of the validator itself", async () => {
+    const pk = await getValidatorProfile(V.pumpkin.identity);
+    expect(pk?.tools.map((t) => [t.name, t.status]).sort()).toEqual([["RugAlert", "claimed"], ["Watchtower", "claimed"]]);
+    expect(pk?.endorsements).toHaveLength(1);
     const bl = await getValidatorProfile(V.blockLogic.identity);
-    const names = bl?.tools.map((t) => [t.name, t.status, t.claims.map((c) => c.status)]);
-    expect(names).toContainEqual(["New Tool", "unclaimed", ["pending"]]);
-    expect(names).toContainEqual(["validators.app", "unclaimed", []]);
-    expect((await getValidatorProfile(V.pumpkin.identity))?.tools.map((t) => t.owner)).toEqual([
-      { name: "Pumpkin's Pool", identity: null },
-      { name: "Pumpkin's Pool", identity: null },
-    ]);
-  });
-
-  it("includes endorsements", async () => {
-    expect((await getValidatorProfile(V.pumpkin.identity))?.endorsements).toHaveLength(1);
+    expect(bl?.tools.map((t) => [t.name, t.status, t.claims.map((c) => c.status)])).toEqual([["New Tool", "unclaimed", ["pending"]]]);
   });
 
   it("resolves the identity used by the CLI fixtures as a mainnet validator", async () => {
@@ -98,13 +114,10 @@ describe("getValidatorProfile", () => {
 
   it("ignores validators of clusters that are not enabled", async () => {
     const ghost = "G".repeat(44);
-    await getDb().insert(validatorsTable).values({ identity: ghost, cluster: "testnet", voteAccount: "H".repeat(44), name: "Pumpkin's Pool", activatedStake: BigInt(1) });
+    await getDb().insert(validatorsTable).values({ identity: ghost, cluster: "testnet", voteAccount: "H".repeat(44), name: "Ghost", activatedStake: BigInt(1) });
     try {
       expect(await getValidatorProfile(ghost)).toBeNull();
-      const lb = await getLeaderboard({});
-      expect(lb.total).toBe(5);
-      expect(lb.items.every((r) => r.validator.cluster === "mainnet")).toBe(true);
-      expect((await getStats()).validatorsTotal).toBe(7);
+      expect((await getStats()).validatorsTotal).toBe(8);
     } finally {
       await getDb().execute(sql`DELETE FROM validators WHERE identity = ${ghost}`);
     }
@@ -112,16 +125,21 @@ describe("getValidatorProfile", () => {
 });
 
 describe("getTools / getToolBySlug", () => {
-  it("filters by category and status", async () => {
+  it("lists unclaimed tools with the seed name as plain owner text, hiding pending-only ones", async () => {
+    const un = await getTools({ status: "unclaimed" });
+    expect(un.map((t) => [t.name, t.owner]).sort()).toEqual([
+      ["Alpenglow Explorer", { name: "Valid Blocks", identity: null }],
+      ["Solana Dashboards", { name: "Valid Blocks", identity: null }],
+      ["Stakewiz", expect.objectContaining({ identity: V.laine.identity })], // stale claim names its signer
+      ["validators.app", { name: "Block Logic", identity: null }],
+    ].sort());
+    expect((await getTools({})).map((t) => t.name)).not.toContain("New Tool");
     expect((await getTools({ category: "Explorer" })).map((t) => t.name).sort()).toEqual(["Alpenglow Explorer", "Stakewiz", "validators.app"]);
-    expect((await getTools({ status: "claimed" })).map((t) => t.name)).toEqual(["Mithril"]);
-    expect(await getTools({ status: "unclaimed" })).toHaveLength(6);
-    expect((await getTools({})).map((x) => x.name)).not.toContain("New Tool");
+    expect((await getTools({ status: "claimed" })).map((t) => t.name).sort()).toEqual(["Mithril", "RugAlert", "Watchtower"]);
   });
 
   it("finds a tool by slug with its canonical url", async () => {
-    const t = await getToolBySlug("mithril");
-    expect(t).toMatchObject({ name: "Mithril", url: "github.com/Overclock-Validator/mithril", kind: "repo", status: "claimed" });
+    expect(await getToolBySlug("mithril")).toMatchObject({ name: "Mithril", url: "github.com/Overclock-Validator/mithril", kind: "repo", status: "claimed" });
     expect(await getToolBySlug("nope")).toBeNull();
   });
 });
@@ -129,14 +147,13 @@ describe("getTools / getToolBySlug", () => {
 describe("getRegistry", () => {
   it("lists active and stale claims only", async () => {
     const r = await getRegistry();
-    expect(r.entries.map((e) => [e.tool.name, e.status]).sort()).toEqual([["Mithril", "active"], ["Stakewiz", "stale"]]);
+    expect(r.entries.map((e) => [e.tool.name, e.status]).sort()).toEqual([["Mithril", "active"], ["RugAlert", "active"], ["Stakewiz", "stale"], ["Watchtower", "active"]]);
   });
 });
 
 describe("seedUnclaimed against MariaDB", () => {
   it("is idempotent and leaves existing tools untouched", async () => {
     const { seedUnclaimed } = await import("@/lib/seed");
-    // the dev data already contains every seed tool and entry
     expect(await seedUnclaimed()).toEqual({ tools: 7, newTools: 0, newEntries: 0 });
     await resetDevDb();
     expect(await seedUnclaimed()).toEqual({ tools: 7, newTools: 7, newEntries: 7 });
@@ -146,16 +163,135 @@ describe("seedUnclaimed against MariaDB", () => {
   });
 });
 
-describe("moderation", () => {
-  it("approving a pending claim makes it count; a second decision is a no-op", async () => {
+// ---- claim flow against the real database, with the real CLI signatures ----
+
+const valid = cli.cases.find((c) => c.name === "valid-claim")!;
+const unclaim = cli.cases.find((c) => c.name === "valid-unclaim")!;
+const TOOL = "github.com/psychovr/proof-of-tooling";
+const clock = () => new Date("2026-10-07T12:00:00Z");
+const healthy = { isPrivate: false, archived: false, isFork: false, commitCount: 40, ownCommits: 40, createdAt: "2026-01-01T00:00:00Z" };
+const flowDeps = () => ({
+  ...createClaimsDeps(),
+  now: clock,
+  fetcher: async () => ({ status: 200, body: JSON.stringify({ identities: [CLI_IDENTITY] }) }),
+  getRepoMetadata: async () => healthy,
+});
+const claimRow = async () => (await getDb().select().from(claims).where(eq(claims.identity, CLI_IDENTITY)))[0];
+
+describe("claim lifecycle on MariaDB (A2, M6)", () => {
+  beforeEach(async () => {
+    await resetDevDb();
+    await seedDevData();
+  });
+
+  it("registers a claim, and repeating it changes nothing", async () => {
+    const d = flowDeps();
+    expect((await processClaim({ message: valid.message, signature: valid.signature, category: "Meta", toolName: "Proof of Tooling" }, d, true)).ok).toBe(true);
+    const first = await claimRow();
+    expect(first).toMatchObject({ status: "active", signedDate: "2026-10-07" });
+    expect((await processClaim({ message: valid.message, signature: valid.signature }, d, true)).ok).toBe(true);
+    expect(await getDb().select().from(claims).where(eq(claims.identity, CLI_IDENTITY))).toHaveLength(1);
+  });
+
+  it("keeps a rejected claim rejected: it cannot be resubmitted or withdrawn", async () => {
+    const d = flowDeps();
+    await processClaim({ message: valid.message, signature: valid.signature }, d, true);
+    await getDb().update(claims).set({ status: "rejected" }).where(eq(claims.identity, CLI_IDENTITY));
+    const again = await processClaim({ message: valid.message, signature: valid.signature }, d, true);
+    expect(again.ok).toBe(false);
+    expect(again.checks.at(-1)).toMatchObject({ id: "status", ok: false });
+    const un = await processClaim({ message: unclaim.message, signature: unclaim.signature }, d, true);
+    expect(un.ok).toBe(false);
+    expect((await claimRow()).status).toBe("rejected");
+  });
+
+  it("the storage guard alone also keeps a rejected row rejected", async () => {
+    const d = flowDeps();
+    await processClaim({ message: valid.message, signature: valid.signature }, d, true);
+    await getDb().update(claims).set({ status: "rejected" }).where(eq(claims.identity, CLI_IDENTITY));
+    const saved = await d.saveClaim({ toolUrl: TOOL, identity: CLI_IDENTITY, cluster: "mainnet", message: valid.message, signature: valid.signature, signedDate: "2026-10-07", action: "claim" });
+    expect(saved.status).toBe("rejected");
+  });
+
+  it("an unclaim signed the same day wins; the public claim signature cannot reactivate it", async () => {
+    const d = flowDeps();
+    await processClaim({ message: valid.message, signature: valid.signature }, d, true);
+    expect((await processClaim({ message: unclaim.message, signature: unclaim.signature }, d, true)).ok).toBe(true);
+    expect((await claimRow()).status).toBe("withdrawn");
+    const replay = await processClaim({ message: valid.message, signature: valid.signature }, d, true);
+    expect(replay.ok).toBe(false);
+    expect(replay.checks.at(-1)).toMatchObject({ id: "date", ok: false });
+    expect((await claimRow()).status).toBe("withdrawn");
+  });
+
+  it("an older signed message never overwrites a newer stored one", async () => {
+    const d = flowDeps();
+    await processClaim({ message: valid.message, signature: valid.signature }, d, true);
+    const saved = await d.saveClaim({ toolUrl: TOOL, identity: CLI_IDENTITY, cluster: "mainnet", message: "older", signature: "1".repeat(64), signedDate: "2026-10-01", action: "unclaim" });
+    expect(saved).toMatchObject({ status: "active", signedDate: "2026-10-07", message: valid.message });
+  });
+});
+
+describe("web tools on MariaDB (A3)", () => {
+  it("counts the identity's other web tools under the same registrable domain only", async () => {
+    await resetDevDb();
+    await seedDevData();
+    const d = createClaimsDeps();
+    const pk = V.pumpkin.identity;
+    // Pumpkin signed watchtower and rugalert, both under pumpkinspool.com
+    expect((await d.getHistory("pumpkinspool.com/another", pk)).sameDomainClaims).toBe(2);
+    expect((await d.getHistory("pumpkinspool.com/watchtower", pk)).sameDomainClaims).toBe(1); // itself excluded
+    expect((await d.getHistory("blog.pumpkinspool.com", pk)).sameDomainClaims).toBe(2); // subdomain, same domain
+    expect((await d.getHistory("other-domain.com", pk)).sameDomainClaims).toBe(0);
+    expect((await d.getHistory("pumpkinspool.com/another", V.quiet.identity)).sameDomainClaims).toBe(0);
+  });
+});
+
+// ---- moderation (M9) ----
+
+describe("moderation on MariaDB", () => {
+  beforeEach(async () => {
+    await resetDevDb();
+    await seedDevData();
+  });
+  const okProof = { ...adminDbDeps, checkProof: async () => ({ id: "proof" as const, ok: true }) };
+  const badProof = { ...adminDbDeps, checkProof: async () => ({ id: "proof" as const, ok: false, detail: "gone" }) };
+
+  it("lists pending claims with an etag", async () => {
+    const list = await listPendingClaims();
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({ toolName: "New Tool", toolUrl: "github.com/blocklogic/new-tool", identity: V.blockLogic.identity });
+    expect(list[0].etag).toMatch(/^[0-9a-f]{32}$/);
+  });
+
+  it("requires the etag, applies approve once, re-checks the proof and writes the audit trail", async () => {
+    const [p] = await listPendingClaims();
     const before = await getStats();
-    const [rows] = await getDb().execute(sql`SELECT id FROM claims WHERE status = 'pending'`);
-    const id = (rows as unknown as { id: number }[])[0].id;
-    expect(await decideClaim(id, "approve")).toBe(true);
-    expect(await decideClaim(id, "reject")).toBe(false);
+    expect(await decideClaim(p.id, "approve", { actor: "rafa", ifMatch: null }, okProof)).toEqual({ ok: false, code: "precondition_required" });
+    expect(await decideClaim(p.id, "approve", { actor: "rafa", ifMatch: "0".repeat(32) }, okProof)).toEqual({ ok: false, code: "precondition_failed" });
+    expect(await decideClaim(p.id, "approve", { actor: "rafa", ifMatch: p.etag }, badProof)).toEqual({ ok: false, code: "proof_invalid", detail: "gone" });
+    expect((await listPendingClaims())).toHaveLength(1); // nothing applied yet
+    expect(await decideClaim(p.id, "approve", { actor: "rafa", ifMatch: p.etag }, okProof)).toEqual({ ok: true, id: p.id, status: "active" });
+    expect(await decideClaim(p.id, "approve", { actor: "rafa", ifMatch: p.etag }, okProof)).toEqual({ ok: false, code: "not_found" });
     const after = await getStats();
     expect(after.toolsClaimed).toBe(before.toolsClaimed + 1);
     expect(after.toolsTotal).toBe(before.toolsTotal + 1);
-    expect((await getRegistry()).entries.map((e) => e.tool.name)).toContain("New Tool");
+    const log = await getDb().select().from(claimDecisions);
+    expect(log).toHaveLength(1);
+    expect(log[0]).toMatchObject({ claimId: p.id, decision: "approve", previousStatus: "pending", actor: "rafa" });
+  });
+
+  it("does not apply a decision if the claim changed after it was reviewed", async () => {
+    const [p] = await listPendingClaims();
+    await getDb().update(claims).set({ message: `${p.message} ` }).where(eq(claims.id, p.id));
+    expect(await decideClaim(p.id, "reject", { actor: "a", ifMatch: p.etag }, okProof)).toEqual({ ok: false, code: "precondition_failed" });
+    expect((await listPendingClaims())[0].id).toBe(p.id);
+  });
+
+  it("reject does not need the proof file and is audited", async () => {
+    const [p] = await listPendingClaims();
+    expect(await decideClaim(p.id, "reject", { actor: "rafa", ifMatch: p.etag }, badProof)).toEqual({ ok: true, id: p.id, status: "rejected" });
+    expect((await getDb().select().from(claimDecisions))[0]).toMatchObject({ decision: "reject", actor: "rafa" });
+    expect((await getRegistry()).entries.map((e) => e.tool.name)).not.toContain("New Tool");
   });
 });

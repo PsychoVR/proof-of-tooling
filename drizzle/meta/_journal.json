@@ -22,6 +22,20 @@
       "when": 1791369701681,
       "tag": "0002_wonderful_black_panther",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1791376623316,
+      "tag": "0003_binary_collation",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1791376632960,
+      "tag": "0004_claim_decisions",
+      "breakpoints": true
     }
   ]
 }

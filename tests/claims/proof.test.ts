@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { checkProofFile, proofFileUrl } from "@/lib/claims";
+import { checkProofFile, proofFileUrl, registrableDomain } from "@/lib/claims";
 import { MAX_PROOF_BYTES } from "@/lib/claims/proof";
 
 const ID = "GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB";
@@ -11,6 +11,13 @@ describe("proofFileUrl", () => {
       kind: "repo",
       url: "https://raw.githubusercontent.com/org/repo/HEAD/.proof-of-tooling.json",
     });
+  });
+
+  it("maps a web tool with a path to the well-known file at the root of its domain", () => {
+    for (const u of ["pumpkinspool.com/watchtower", "pumpkinspool.com/watchtower/rugs", "ag.validblocks.com", "a.b.example.co.uk/x/y"]) {
+      const host = u.split("/")[0];
+      expect(proofFileUrl(u)).toEqual({ kind: "web", url: `https://${host}/.well-known/proof-of-tooling.json` });
+    }
   });
 
   it("maps bare domains to the well-known path", () => {
@@ -29,7 +36,16 @@ describe("proofFileUrl", () => {
     "127.0.0.1",
     "example.com:8080",
     "user@example.com",
-    "example.com/path",
+    "example.com/../etc",
+    "example.com/a/./b",
+    "example.com/a//b",
+    "example.com/a b",
+    "example.com/a?x=1",
+    "example.com/a#frag",
+    "example.com/" + "a/".repeat(9),
+    "example.invalidtld", // not in the public suffix list
+    "192.168.0.1/tool",
+    "git.local",
     "",
   ])("rejects %s", (u) => {
     expect(proofFileUrl(u)).toBeNull();
@@ -77,4 +93,20 @@ describe("checkProofFile", () => {
   it("fails when the identity is absent", async () => {
     expect((await checkProofFile("a.io", ID, ok({ identities: ["other"] }))).detail).toContain("not listed");
   });
+});
+
+describe("registrableDomain (public suffix list)", () => {
+  it.each([
+    ["pumpkinspool.com", "pumpkinspool.com"],
+    ["ag.validblocks.com/x", "validblocks.com"],
+    ["a.b.example.co.uk", "example.co.uk"],
+    ["foo.github.io/x", "foo.github.io"], // private suffix: every user is its own domain
+    ["bar.github.io", "bar.github.io"],
+    ["x.vercel.app", "x.vercel.app"],
+  ])("%s -> %s", (u, d) => expect(registrableDomain(u)).toBe(d));
+
+  it.each(["github.com/org/repo", "github.com", "localhost", "1.2.3.4", "example.invalidtld", "", "a b.com"])(
+    "is null for repos and unsupported hosts: %s",
+    (u) => expect(registrableDomain(u)).toBeNull(),
+  );
 });

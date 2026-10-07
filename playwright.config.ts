@@ -21,6 +21,8 @@ export default defineConfig({
     reuseExistingServer: false,
     timeout: 300_000,
     env: {
+      E2E_BUILD: "1", // swaps in the claim-verification test double and builds into .next-e2e
+      ADMIN_SECRET: "e2e-admin-secret-0123456789abcdef",
       E2E_CLAIMS_STUB: "1",
       E2E_NOW: "2026-10-07T12:00:00Z",
       E2E_PROOF_IDENTITIES: "21CzjGL6u9LircpHKpRH9myUuRD634ZYXaf1ncqQLhwh",

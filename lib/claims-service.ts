@@ -1,6 +1,7 @@
 import {
   checkProofFile,
   evaluateRepoRules,
+  evaluateWebRules,
   parseClaimMessage,
   proofFileUrl,
   verifyClaimSignature,
@@ -13,6 +14,8 @@ export interface ClaimHistory {
   existing: Claim | null;
   identityClaimsLast24h: number;
   otherClaimants: number;
+  /** Other tools of this identity (active or pending) under the same registrable domain. */
+  sameDomainClaims?: number;
 }
 
 /** Everything that touches the network or the database, injected so the flow is testable. */
@@ -66,15 +69,33 @@ export async function processClaim(
   checks.push({ id: "validator", ok: true });
 
   const history = await deps.getHistory(parsed.toolUrl, parsed.identity);
+  const existing = history.existing;
+
+  // An earlier decision or a newer signed message always wins over a replayed one. Public
+  // signatures (registry.json) cannot be used to undo an unclaim or a moderation decision.
+  if (existing) {
+    if (existing.status === "rejected") {
+      checks.push({ id: "status", ok: false, detail: "This claim was rejected by moderation." });
+      return { ok: false, checks };
+    }
+    if (parsed.date < existing.signedDate) {
+      checks.push({ id: "date", ok: false, detail: "A newer signed message already exists for this tool." });
+      return { ok: false, checks };
+    }
+    if (parsed.action === "claim" && existing.status === "withdrawn" && parsed.date === existing.signedDate) {
+      checks.push({ id: "date", ok: false, detail: "An unclaim signed the same day takes precedence; sign a new claim dated after it." });
+      return { ok: false, checks };
+    }
+  }
 
   // Idempotent: repeating an existing claim returns it unchanged.
-  if (parsed.action === "claim" && history.existing && history.existing.status === "active") {
+  if (parsed.action === "claim" && existing && existing.status === "active") {
     checks.push({ id: "proof", ok: true, detail: "Already claimed." });
-    return { ok: true, claim: history.existing, checks };
+    return { ok: true, claim: existing, checks };
   }
-  if (parsed.action === "claim" && history.existing && history.existing.status === "pending") {
+  if (parsed.action === "claim" && existing && existing.status === "pending") {
     checks.push({ id: "proof", ok: true, detail: "Already waiting for review." });
-    return { ok: true, inReview: true, claim: history.existing, checks };
+    return { ok: true, inReview: true, claim: existing, checks };
   }
   let inReview = false;
 
@@ -84,26 +105,32 @@ export async function processClaim(
     checks.push(proof);
     if (!proof.ok) return { ok: false, checks };
 
-    if (proofFileUrl(parsed.toolUrl)?.kind === "repo") {
+    const ctx = {
+      now: deps.now(),
+      identityClaimsLast24h: history.identityClaimsLast24h,
+      alreadyClaimedBySameIdentity: false,
+      otherClaimants: history.otherClaimants,
+    };
+    const isRepo = proofFileUrl(parsed.toolUrl)?.kind === "repo";
+    const checkId = isRepo ? "repo" : "rules";
+    let outcome;
+    if (isRepo) {
       const meta = await deps.getRepoMetadata(parsed.toolUrl);
       if (!meta) {
         checks.push({ id: "repo", ok: false, detail: "Repository metadata unavailable." });
         return { ok: false, checks };
       }
-      const outcome = evaluateRepoRules(meta, {
-        now: deps.now(),
-        identityClaimsLast24h: history.identityClaimsLast24h,
-        alreadyClaimedBySameIdentity: false,
-        otherClaimants: history.otherClaimants,
-      });
-      if (outcome.decision === "reject") {
-        checks.push({ id: "repo", ok: false, detail: outcome.reasons.join(" ") });
-        return { ok: false, checks };
-      }
-      inReview = outcome.decision === "review";
-      checks.push({ id: "repo", ok: true, detail: inReview ? `Needs manual review: ${outcome.reasons.join(" ")}` : undefined });
+      outcome = evaluateRepoRules(meta, ctx);
+    } else {
+      outcome = evaluateWebRules({ ...ctx, sameDomainClaims: history.sameDomainClaims ?? 0 });
     }
-  } else if (!history.existing) {
+    if (outcome.decision === "reject") {
+      checks.push({ id: checkId, ok: false, detail: outcome.reasons.join(" ") });
+      return { ok: false, checks };
+    }
+    inReview = outcome.decision === "review";
+    checks.push({ id: checkId, ok: true, detail: inReview ? `Needs manual review: ${outcome.reasons.join(" ")}` : undefined });
+  } else if (!existing) {
     checks.push({ id: "proof", ok: false, detail: "No claim to withdraw." });
     return { ok: false, checks };
   }

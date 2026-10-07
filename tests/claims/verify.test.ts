@@ -97,6 +97,15 @@ describe("verifyClaimSignature", () => {
     }
   });
 
+  it("returns a format failure, not an exception, for a message over the off-chain limit", () => {
+    const long = `${DEMO.message} | x=${"a".repeat(1250)}`;
+    expect(long.length).toBeGreaterThan(1212);
+    const r = verifyClaimSignature({ ...base, message: long });
+    expect(r.ok).toBe(false);
+    expect(failed(r)).toBe("format");
+    expect(r.checks.find((c) => !c.ok)?.detail).toBe("Message is too long.");
+  });
+
   describe("real CLI fixtures", () => {
     const fx = cli as { signedOn: string; identity: string; cases: { name: string; message: string; signature: string; expect: string }[] };
     const clock = new Date(`${fx.signedOn}T12:00:00Z`);

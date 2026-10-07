@@ -9,31 +9,84 @@ vi.mock("@/lib/claims/verify", async (orig) => ({
 
 const { processClaim } = await import("@/lib/claims-service");
 type Deps = import("@/lib/claims-service").ClaimsDeps;
+type History = Awaited<ReturnType<Deps["getHistory"]>>;
 
 const ID = "21CzjGL6u9LircpHKpRH9myUuRD634ZYXaf1ncqQLhwh";
-const req = { message: `proof-of-tooling v1 | claim | example.com | ${ID} | 2026-10-07`, signature: "x" };
+const msg = (url: string) => ({ message: `proof-of-tooling v1 | claim | ${url} | ${ID} | 2026-10-07`, signature: "x" });
+
+function setup(history: Partial<History> = {}) {
+  const fetched: string[] = [];
+  const getRepoMetadata = vi.fn();
+  const saveClaim = vi.fn(async () => ({ id: 1, status: "active" }) as never);
+  const deps: Deps = {
+    now: () => new Date("2026-10-07T12:00:00Z"),
+    fetcher: async (url) => {
+      fetched.push(url);
+      return { status: 200, body: JSON.stringify({ identities: [ID] }) };
+    },
+    findValidatorCluster: async () => "mainnet",
+    getRepoMetadata,
+    getHistory: async () => ({ existing: null, identityClaimsLast24h: 0, otherClaimants: 0, sameDomainClaims: 0, ...history }),
+    saveClaim,
+  };
+  return { deps, fetched, getRepoMetadata, saveClaim };
+}
 
 describe("processClaim for web tools", () => {
-  it("checks the well-known proof file and skips repo rules", async () => {
-    const fetched: string[] = [];
-    const getRepoMetadata = vi.fn();
-    const saveClaim = vi.fn(async () => ({ id: 1, status: "active" }) as never);
-    const deps: Deps = {
-      now: () => new Date("2026-10-07T12:00:00Z"),
-      fetcher: async (url) => {
-        fetched.push(url);
-        return { status: 200, body: JSON.stringify({ identities: [ID] }) };
-      },
-      findValidatorCluster: async () => "testnet",
-      getRepoMetadata,
-      getHistory: async () => ({ existing: null, identityClaimsLast24h: 0, otherClaimants: 0 }),
-      saveClaim,
-    };
-    const r = await processClaim(req, deps, true);
+  it("checks the well-known proof file and skips repo metadata", async () => {
+    const s = setup();
+    const r = await processClaim(msg("example.com"), s.deps, true);
     expect(r.ok).toBe(true);
-    expect(fetched).toEqual(["https://example.com/.well-known/proof-of-tooling.json"]);
-    expect(getRepoMetadata).not.toHaveBeenCalled();
-    expect(r.checks.map((c) => c.id)).not.toContain("repo");
-    expect(saveClaim).toHaveBeenCalledOnce();
+    expect(r.inReview).toBe(false);
+    expect(s.fetched).toEqual(["https://example.com/.well-known/proof-of-tooling.json"]);
+    expect(s.getRepoMetadata).not.toHaveBeenCalled();
+    expect(r.checks.map((c) => c.id)).toEqual(["signature", "validator", "proof", "rules"]);
+    expect(s.saveClaim).toHaveBeenCalledOnce();
+  });
+
+  it("a proof file at the root of the domain covers any URL under it", async () => {
+    const s = setup();
+    const r = await processClaim(msg("pumpkinspool.com/watchtower/rugs"), s.deps, true);
+    expect(r.ok).toBe(true);
+    expect(s.fetched).toEqual(["https://pumpkinspool.com/.well-known/proof-of-tooling.json"]);
+    expect(s.saveClaim).toHaveBeenCalledWith(expect.objectContaining({ toolUrl: "pumpkinspool.com/watchtower/rugs" }));
+  });
+
+  it("applies the anti-abuse rules to web claims too (A3): over the daily limit goes to review", async () => {
+    const s = setup({ identityClaimsLast24h: 6 });
+    const r = await processClaim(msg("a.example.com"), s.deps, true);
+    expect(r).toMatchObject({ ok: true, inReview: true });
+    expect(r.checks.at(-1)).toMatchObject({ id: "rules", ok: true });
+    expect(r.checks.at(-1)?.detail).toContain("Needs manual review");
+    expect(s.saveClaim).toHaveBeenCalledWith(expect.objectContaining({ pending: true }));
+  });
+
+  it("a validator cannot fill the ranking with subdomains of one domain: the 6th goes to review", async () => {
+    expect((await processClaim(msg("a5.example.com"), setup({ sameDomainClaims: 4 }).deps, true)).inReview).toBe(false);
+    const s = setup({ sameDomainClaims: 5 });
+    const r = await processClaim(msg("a6.example.com"), s.deps, true);
+    expect(r.inReview).toBe(true);
+    expect(r.checks.at(-1)?.detail).toContain("under this domain");
+    expect(s.saveClaim).toHaveBeenCalledWith(expect.objectContaining({ pending: true }));
+  });
+
+  it("goes to review when another validator already claimed the same URL", async () => {
+    const r = await processClaim(msg("example.com/tool"), setup({ otherClaimants: 1 }).deps, false);
+    expect(r).toMatchObject({ ok: true, inReview: true });
+  });
+
+  it("treats a missing sameDomainClaims as zero", async () => {
+    const s = setup();
+    const deps = { ...s.deps, getHistory: async () => ({ existing: null, identityClaimsLast24h: 0, otherClaimants: 0 }) };
+    expect((await processClaim(msg("example.com"), deps, false)).inReview).toBe(false);
+  });
+
+  it("rejects URLs that have no public registrable domain", async () => {
+    for (const url of ["localhost", "10.0.0.1", "internal.invalidtld", "example.com/../x"]) {
+      const s = setup();
+      const r = await processClaim(msg(url), s.deps, true);
+      expect(r.ok, url).toBe(false);
+      expect(s.saveClaim).not.toHaveBeenCalled();
+    }
   });
 });

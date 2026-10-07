@@ -2,7 +2,7 @@ import bs58 from "bs58";
 import nacl from "tweetnacl";
 import type { ClaimCheckResult } from "@/lib/types";
 import { parseClaimMessage } from "./message";
-import { serializeOffchainV0 } from "./offchain";
+import { OFFCHAIN_MAX_MESSAGE_BYTES, serializeOffchainV0 } from "./offchain";
 
 export const MAX_SIGNATURE_AGE_DAYS = 7;
 const MAX_FUTURE_DAYS = 1;
@@ -51,6 +51,7 @@ export function verifyClaimSignature(input: VerifyInput): VerifyResult {
   if (parsed.identity !== input.identity) {
     return fail("format", "Identity in the message does not match the identity provided.");
   }
+  if (input.message.length > OFFCHAIN_MAX_MESSAGE_BYTES) return fail("format", "Message is too long.");
   pass("format");
 
   const age = daysSince(parsed.date, input.now ?? new Date());

@@ -73,10 +73,8 @@ export default async function ToolPage({ params }: Props) {
                     <Link className="linkplain" href={`/v/${encodeURIComponent(u.identity)}`}>
                       {u.name?.trim() || shortKey(u.identity)}
                     </Link>
-                  ) : (
-                    <span>{u.name}</span>
-                  )}
-                  <StatusPill status={toolPillStatus(tool, u.identity ?? undefined)} />
+                  ) : null}
+                  {u.identity ? <StatusPill status={toolPillStatus(tool, u.identity)} /> : <span className="vsub">Unclaimed · built by {u.name}</span>}
                 </li>
               ))}
             </ul>

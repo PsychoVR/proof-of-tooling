@@ -113,7 +113,9 @@ export const CHECK_LABELS: Record<ClaimCheckResult["id"], string> = {
   date: "Claim date is valid and recent",
   encoding: "Signature is well formed",
   signature: "Signature matches the message and identity",
+  status: "Claim is not blocked by an earlier decision",
   validator: "Identity has a live vote account",
   proof: "Proof file lists this identity",
   repo: "Repo is public and original",
+  rules: "Passes the anti-abuse rules",
 };

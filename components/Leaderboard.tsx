@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ENABLED_CLUSTERS, MULTI_CLUSTER } from "@/lib/clusters";
-import { CATEGORIES, type Category, type Cluster, type LeaderboardRow } from "@/lib/types";
+import { CATEGORIES, type Category, type Cluster, type LeaderboardRow, type ToolWithClaims } from "@/lib/types";
 import { CLUSTER_LABEL, displayName, safeHttpUrl, shortKey } from "@/lib/ui/format";
 import { Avatar } from "./Avatar";
 import { StatusPill } from "./StatusPill";
@@ -28,12 +28,15 @@ function Seg<T extends string>({ label, value, options, onChange }: {
   );
 }
 
-function rowStatus(r: LeaderboardRow): "claimed" | "stale" | "unclaimed" {
-  if (r.tools.some((t) => t.status === "signed")) return "claimed";
-  return r.tools.some((t) => t.status === "stale") ? "stale" : "unclaimed";
+function rowStatus(r: LeaderboardRow): "claimed" | "stale" {
+  return r.tools.some((t) => t.status === "signed") ? "claimed" : "stale";
 }
 
-export function Leaderboard({ rows }: { rows: LeaderboardRow[] }) {
+/**
+ * Signed validators ranked by tools, plus a separate list of unclaimed tools. Unclaimed tools show who
+ * built them as plain text: they are never linked to a validator profile or counted in its ranking.
+ */
+export function Leaderboard({ rows, unclaimed }: { rows: LeaderboardRow[]; unclaimed: ToolWithClaims[] }) {
   const [cluster, setCluster] = useState<Cluster | "all">("all");
   const [category, setCategory] = useState<Category | "all">("all");
   const [status, setStatus] = useState<StatusFilter>("all");
@@ -44,13 +47,21 @@ export function Leaderboard({ rows }: { rows: LeaderboardRow[] }) {
     return rows.filter((r) => {
       if (cluster !== "all" && r.validator.cluster !== cluster) return false;
       if (category !== "all" && !r.tools.some((t) => t.category === category)) return false;
-      if (status === "claimed" && !r.tools.some((t) => t.status === "signed")) return false;
-      if (status === "unclaimed" && !r.tools.some((t) => t.status === "unclaimed")) return false;
       if (!q) return true;
       const hay = [r.validator.name ?? "", r.validator.identity, ...r.tools.map((t) => t.name)].join(" ").toLowerCase();
       return hay.includes(q);
     });
-  }, [rows, cluster, category, status, query]);
+  }, [rows, cluster, category, query]);
+
+  const visibleUnclaimed = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return unclaimed.filter((t) => {
+      if (category !== "all" && t.category !== category) return false;
+      return !q || `${t.name} ${t.owner?.name ?? ""}`.toLowerCase().includes(q);
+    });
+  }, [unclaimed, category, query]);
+  const showSigned = status !== "unclaimed";
+  const showUnclaimed = status !== "claimed";
 
   return (
     <section className="sec" id="ledger" aria-labelledby="ledger-h">
@@ -105,8 +116,10 @@ export function Leaderboard({ rows }: { rows: LeaderboardRow[] }) {
         </div>
       </div>
       <p className="sr-only" role="status">
-        {visible.length} {visible.length === 1 ? "validator" : "validators"} shown
+        {showSigned ? visible.length : 0} {visible.length === 1 && showSigned ? "validator" : "validators"} and{" "}
+        {showUnclaimed ? visibleUnclaimed.length : 0} unclaimed tools shown
       </p>
+      {showSigned && (
       <div className="table-wrap">
         <table className="ledger" role="table">
           <thead role="rowgroup">
@@ -136,7 +149,7 @@ export function Leaderboard({ rows }: { rows: LeaderboardRow[] }) {
                     <td role="cell" className="rank">{i + 1}</td>
                     <td role="cell" className="c-validator">
                       <div className="vcell">
-                        <Avatar name={name} iconUrl={r.validator.iconUrl} />
+                        <Avatar name={name} />
                         <div>
                           <div className="vname">
                             <Link href={`/v/${encodeURIComponent(r.validator.identity)}`}>{name}</Link>
@@ -172,6 +185,20 @@ export function Leaderboard({ rows }: { rows: LeaderboardRow[] }) {
           </tbody>
         </table>
       </div>
+      )}
+      {showUnclaimed && visibleUnclaimed.length > 0 && (
+        <div className="panel" id="unclaimed" style={{ marginTop: 16 }}>
+          <h3 className="label" style={{ marginBottom: 10 }}>Unclaimed tools</h3>
+          <ul className="list">
+            {visibleUnclaimed.map((t) => (
+              <li key={t.id}>
+                <ToolChip tool={t} />
+                <span className="vsub">Unclaimed · built by {t.owner?.name ?? "an unknown validator"}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </section>
   );
 }

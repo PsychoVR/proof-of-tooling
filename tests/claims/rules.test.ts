@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluateRepoRules, type RepoMetadata, type RuleContext } from "@/lib/claims";
+import { MAX_TOOLS_PER_DOMAIN, evaluateRepoRules, evaluateWebRules, type RepoMetadata, type RuleContext } from "@/lib/claims";
 
 const NOW = new Date("2026-10-07T00:00:00Z");
 const repo: RepoMetadata = {
@@ -61,5 +61,34 @@ describe("evaluateRepoRules", () => {
   it("collects several review reasons", () => {
     const out = evaluateRepoRules({ ...repo, commitCount: 2 }, { ...ctx, otherClaimants: 2 });
     expect(out.reasons).toHaveLength(2);
+  });
+});
+
+describe("evaluateWebRules", () => {
+  const web = { now: NOW, identityClaimsLast24h: 0, alreadyClaimedBySameIdentity: false, otherClaimants: 0, sameDomainClaims: 0 };
+
+  it("accepts a plain web claim", () => {
+    expect(evaluateWebRules(web)).toEqual({ decision: "accept", reasons: [] });
+  });
+
+  it("applies the daily limit (5 ok, 6 review)", () => {
+    expect(evaluateWebRules({ ...web, identityClaimsLast24h: 5 }).decision).toBe("accept");
+    expect(evaluateWebRules({ ...web, identityClaimsLast24h: 6 }).decision).toBe("review");
+  });
+
+  it("sends to review when other validators claim the same URL", () => {
+    expect(evaluateWebRules({ ...web, otherClaimants: 1 }).decision).toBe("review");
+  });
+
+  it("caps tools per registrable domain so wildcard subdomains cannot inflate the ranking", () => {
+    expect(evaluateWebRules({ ...web, sameDomainClaims: MAX_TOOLS_PER_DOMAIN - 1 }).decision).toBe("accept");
+    const out = evaluateWebRules({ ...web, sameDomainClaims: MAX_TOOLS_PER_DOMAIN });
+    expect(out.decision).toBe("review");
+    expect(out.reasons.join(" ")).toContain("under this domain");
+  });
+
+  it("collects several reasons and rejects a duplicate claim by the same identity", () => {
+    expect(evaluateWebRules({ ...web, otherClaimants: 1, sameDomainClaims: 9 }).reasons).toHaveLength(2);
+    expect(evaluateWebRules({ ...web, alreadyClaimedBySameIdentity: true }).decision).toBe("reject");
   });
 });

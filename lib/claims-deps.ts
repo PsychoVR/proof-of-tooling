@@ -1,11 +1,12 @@
-import { and, count, eq, gte, ne } from "drizzle-orm";
+import { and, count, eq, gte, inArray, ne, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { claims, tools, validators } from "@/db/schema";
 import { ENABLED_CLUSTERS } from "@/lib/clusters";
 import { getEnv } from "@/lib/env";
+import { e2eOverrides } from "@/lib/claims-stub";
 import { safeFetcher } from "@/lib/safe-fetch";
 import type { Fetcher, RepoMetadata } from "@/lib/claims";
-import { proofFileUrl } from "@/lib/claims";
+import { proofFileUrl, registrableDomain } from "@/lib/claims";
 import type { ClaimsDeps } from "@/lib/claims-service";
 import type { Claim, Cluster } from "@/lib/types";
 
@@ -56,25 +57,27 @@ const toClaim = (r: ClaimRow): Claim => ({
   lastCheckedAt: r.lastCheckedAt?.toISOString() ?? null,
 });
 
-const slugOf = (url: string) => url.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 128);
+/** Other web tools of this identity (active or pending) under the same registrable domain. */
+async function sameDomainClaims(toolUrl: string, identity: string): Promise<number> {
+  const domain = registrableDomain(toolUrl);
+  if (!domain) return 0;
+  const rows = await getDb()
+    .select({ url: tools.url })
+    .from(claims)
+    .innerJoin(tools, eq(tools.id, claims.toolId))
+    .where(and(eq(claims.identity, identity), inArray(claims.status, ["active", "pending"]), eq(tools.kind, "web")));
+  return rows.filter((r) => r.url !== toolUrl && registrableDomain(r.url) === domain).length;
+}
 
 /**
- * Test double for the Playwright suite: fixed clock and canned network answers, real database.
- * Needs E2E_CLAIMS_STUB=1 and only works against the local docker database (localhost:3307),
- * so it cannot be switched on by accident anywhere else.
+ * Upsert guard, evaluated against the stored row: a rejected claim stays rejected, an older
+ * signed message never overwrites a newer one, and an unclaim wins over a claim signed the same day.
  */
-function e2eOverrides(): Partial<ClaimsDeps> | null {
-  if (process.env.E2E_CLAIMS_STUB !== "1") return null;
-  const db = new URL(getEnv().DATABASE_URL);
-  if (db.hostname !== "localhost" && db.hostname !== "127.0.0.1") return null;
-  if (db.port !== "3307") return null;
-  const identities = (process.env.E2E_PROOF_IDENTITIES ?? "").split(",").filter(Boolean);
-  return {
-    now: () => new Date(process.env.E2E_NOW ?? "2026-10-07T12:00:00Z"),
-    fetcher: async () => ({ status: 200, body: JSON.stringify({ identities }) }),
-    getRepoMetadata: async () => ({ isPrivate: false, archived: false, isFork: false, commitCount: 40, ownCommits: 40, createdAt: "2026-01-01T00:00:00Z" }),
-  };
-}
+const applyUpdate = sql`(${claims.status} <> 'rejected' AND ${claims.signedDate} <= VALUES(${claims.signedDate}) AND NOT (${claims.signedDate} = VALUES(${claims.signedDate}) AND ${claims.status} = 'withdrawn' AND VALUES(${claims.status}) <> 'withdrawn'))`;
+const keepOrTake = (col: typeof claims.status | typeof claims.cluster | typeof claims.message | typeof claims.signature | typeof claims.signedDate) =>
+  sql`IF(${applyUpdate}, VALUES(${col}), ${col})`;
+
+const slugOf = (url: string) => url.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 128);
 
 export function createClaimsDeps(): ClaimsDeps {
   return {
@@ -93,10 +96,15 @@ export function createClaimsDeps(): ClaimsDeps {
       const [tool] = await db.select().from(tools).where(eq(tools.url, toolUrl));
       const since = new Date(Date.now() - 86_400_000);
       const [recent] = await db.select({ n: count() }).from(claims).where(and(eq(claims.identity, identity), gte(claims.verifiedAt, since)));
-      if (!tool) return { existing: null, identityClaimsLast24h: recent.n, otherClaimants: 0 };
+      if (!tool) return { existing: null, identityClaimsLast24h: recent.n, otherClaimants: 0, sameDomainClaims: await sameDomainClaims(toolUrl, identity) };
       const [existing] = await db.select().from(claims).where(and(eq(claims.toolId, tool.id), eq(claims.identity, identity)));
       const [others] = await db.select({ n: count() }).from(claims).where(and(eq(claims.toolId, tool.id), ne(claims.identity, identity), eq(claims.status, "active")));
-      return { existing: existing ? toClaim(existing) : null, identityClaimsLast24h: recent.n, otherClaimants: others.n };
+      return {
+        existing: existing ? toClaim(existing) : null,
+        identityClaimsLast24h: recent.n,
+        otherClaimants: others.n,
+        sameDomainClaims: await sameDomainClaims(toolUrl, identity),
+      };
     },
 
     async saveClaim(input) {
@@ -112,7 +120,18 @@ export function createClaimsDeps(): ClaimsDeps {
       await db
         .insert(claims)
         .values({ toolId: tool.id, identity: input.identity, cluster: input.cluster, message: input.message, signature: input.signature, signedDate: input.signedDate, status })
-        .onDuplicateKeyUpdate({ set: { cluster: input.cluster, message: input.message, signature: input.signature, signedDate: input.signedDate, status, verifiedAt: new Date() } });
+        // SET runs left to right and later expressions see the updated columns, so status
+        // is applied before signed_date, and verified_at before both.
+        .onDuplicateKeyUpdate({
+          set: {
+            cluster: keepOrTake(claims.cluster),
+            message: keepOrTake(claims.message),
+            signature: keepOrTake(claims.signature),
+            verifiedAt: sql`IF(${applyUpdate}, CURRENT_TIMESTAMP, ${claims.verifiedAt})`,
+            status: keepOrTake(claims.status),
+            signedDate: keepOrTake(claims.signedDate),
+          },
+        });
       const [row] = await db.select().from(claims).where(and(eq(claims.toolId, tool.id), eq(claims.identity, input.identity)));
       return toClaim(row);
     },

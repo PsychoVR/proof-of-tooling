@@ -32,11 +32,11 @@ describe("parseValidatorInfo", () => {
     expect(a).toEqual({
       name: "Alpha Pool",
       website: "https://alpha.example.com/",
-      iconUrl: "https://alpha.example.com/logo.png",
+      iconUrl: null, // remote icons are never kept, even when the on-chain url looks safe
     });
   });
 
-  it("drops javascript: and non-https icon urls", () => {
+  it("never keeps icon urls (avatars are initials only)", () => {
     expect(info.get("IdentBBBB11111111111111111111111111111111111")).toEqual({
       name: "Bravo",
       website: null,

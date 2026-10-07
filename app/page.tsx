@@ -4,12 +4,16 @@ import { KpiStrip } from "@/components/KpiStrip";
 import { Leaderboard } from "@/components/Leaderboard";
 import { Odometer } from "@/components/Odometer";
 import { StatusStack } from "@/components/StatusStack";
-import { getLeaderboard, getStats } from "@/lib/queries";
+import { getLeaderboard, getStats, getTools } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const [stats, board] = await Promise.all([getStats(), getLeaderboard({ pageSize: 100 })]);
+  const [stats, board, unclaimed] = await Promise.all([
+    getStats(),
+    getLeaderboard({ pageSize: 100 }),
+    getTools({ status: "unclaimed" }),
+  ]);
   const rows = board.items;
   return (
     <>
@@ -32,7 +36,7 @@ export default async function Home() {
         </div>
       </section>
 
-      <Leaderboard rows={rows} />
+      <Leaderboard rows={rows} unclaimed={unclaimed} />
 
       <section className="sec" aria-labelledby="how-h">
         <div className="sec-head">

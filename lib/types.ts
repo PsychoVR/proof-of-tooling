@@ -113,8 +113,8 @@ export interface Page<T> {
   total: number;
 }
 
-/** Per-tool state in a leaderboard row: a live signed claim, a seed entry or an expired claim. */
-export type LeaderboardToolStatus = "signed" | "unclaimed" | "stale";
+/** Per-tool state in a leaderboard row: a live signed claim or an expired one (listed, not counted). */
+export type LeaderboardToolStatus = "signed" | "stale";
 
 export interface LeaderboardTool extends Pick<Tool, "id" | "slug" | "name" | "category" | "url"> {
   status: LeaderboardToolStatus;
@@ -160,9 +160,11 @@ export type ClaimCheckId =
   | "date"
   | "encoding"
   | "signature"
+  | "status"
   | "validator"
   | "proof"
-  | "repo";
+  | "repo"
+  | "rules";
 
 export interface ClaimCheckResult {
   id: ClaimCheckId;

@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build --webpack",
+    "build": "next build --webpack && node scripts/check-prod-bundle.mjs",
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run",
@@ -20,7 +20,8 @@
     "db:reset": "docker compose down -v && docker compose up -d --wait && npm run db:migrate",
     "db:seed": "tsx --env-file-if-exists=.env db/seed.ts",
     "db:seed:dev": "tsx --env-file-if-exists=.env db/dev-seed.ts",
-    "test:db": "vitest run --config vitest.db.config.ts"
+    "test:db": "vitest run --config vitest.db.config.ts",
+    "check:bundle": "node scripts/check-prod-bundle.mjs"
   },
   "dependencies": {
     "bs58": "^6.0.0",
@@ -29,6 +30,7 @@
     "next": "^16.4.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
+    "tldts": "^7.4.16",
     "tweetnacl": "^1.0.3",
     "zod": "^4.6.5"
   },

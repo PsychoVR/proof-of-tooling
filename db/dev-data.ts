@@ -16,6 +16,8 @@ export const DEV_VALIDATORS = {
   overclock: { identity: "nTPkyRFA6CAFjF1YveCHK1ATbQgdM9mwZgikp4Wzxrxk", vote: "tcSSSS7XhS4D5EVB8Nf471dAb7Qg25xEgRAhHPfQX88w", name: "Overclock", stake: "500000000000000" },
   laine: { identity: "YWXXL6A7pNpHXvmBa2EaQAmb2qaLix6mwHaQBPrFbbrZ", vote: "NhFgtsqwDtGuSptFDaYPo22sJXHDmfPVtoPQ6F7FXDNE", name: "Laine", stake: "400000000000000" },
   blockLogic: { identity: "Xgzgv1XiPti6vj8RsnqDXyCUshN6toSWSp6oBB92AezW", vote: "tiAgufXjPAcc921toi7ap9UxDuxE2HEKZGqeMHbTv94p", name: "Block Logic", stake: "300000000000000" },
+  // Another validator that copies a real validator name (case and spacing changed) to try to pick up its seed entries.
+  impostor: { identity: "FQR9Dn369GtZESi2WYWRYdDzvS6YFq2mJaTXzRo8jH7u", vote: "5RgvR7j4NGm6YziazEetAf5b3YmDAxeWoeyVKcPwyU9B", name: " overclock ", stake: "100000000000000" },
   quiet: { identity: "PzWjeuzaTuyZ9bAaZ2xVrCf1rtACAXgo8c4MkaacXsr7", vote: "yc4GDJ3r7ZVc2qz5VMgZfZDmJVZbtXZGmayyHczDvV9T", name: "Quiet Validator", stake: "200000000000000" },
 } as const;
 
@@ -32,7 +34,7 @@ export function assertLocalDb(url = process.env.DATABASE_URL ?? "") {
 export async function resetDevDb(db: Db = getDb()) {
   assertLocalDb();
   await db.execute(sql`SET FOREIGN_KEY_CHECKS = 0`);
-  for (const t of ["endorsements", "claims", "seed_entries", "tools", "validators"]) {
+  for (const t of ["claim_decisions", "endorsements", "claims", "seed_entries", "tools", "validators"]) {
     await db.execute(sql.raw(`TRUNCATE TABLE \`${t}\``));
   }
   await db.execute(sql`SET FOREIGN_KEY_CHECKS = 1`);
@@ -57,6 +59,10 @@ export async function seedDevData(db: Db = getDb()) {
 
   const mithril = SEED_TOOLS.find((s) => s.slug === "mithril")!.url;
   await claim(await idOf(mithril), DEV_VALIDATORS.overclock.identity, mithril, "active");
+  for (const slug of ["watchtower", "rugalert"]) {
+    const url = SEED_TOOLS.find((s) => s.slug === slug)!.url;
+    await claim(await idOf(url), DEV_VALIDATORS.pumpkin.identity, url, "active");
+  }
   const stakewiz = SEED_TOOLS.find((s) => s.slug === "stakewiz")!.url;
   await claim(await idOf(stakewiz), DEV_VALIDATORS.laine.identity, stakewiz, "stale");
 

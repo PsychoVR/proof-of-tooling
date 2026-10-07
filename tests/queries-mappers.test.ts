@@ -80,28 +80,34 @@ describe("buildStats", () => {
 describe("buildLeaderboard", () => {
   const tools = [tool(1), tool(2), tool(3)];
   const validators = [vrow("A", "Alpha", 10n), vrow("B", "Beta", 99n), vrow("C", "Gamma", 5n), vrow("D", null, 1n)];
-  const claims = [{ toolId: 1, identity: "A", cluster: "mainnet" as const, status: "active" as const }, { toolId: 2, identity: "C", cluster: "mainnet" as const, status: "stale" as const }];
-  const seeds = [
-    { toolId: 3, validatorName: " alpha " },
-    { toolId: 1, validatorName: "Alpha" },
-  ];
+  const live = (toolId: number, identity: string, status: "active" | "stale" | "pending") => ({ toolId, identity, cluster: "mainnet" as const, status });
 
-  it("merges claims and name-matched seeds, sorts and omits empty validators", () => {
-    const { items, total } = buildLeaderboard(validators, claims, seeds, tools, 1, 10);
-    expect(total).toBe(2);
-    expect(items.map((r) => r.validator.identity)).toEqual(["A", "C"]);
-    expect(items[0]).toMatchObject({ toolCount: 2, claimedCount: 1 });
-    expect(items[0].tools.map((t) => [t.id, t.status])).toEqual([[1, "signed"], [3, "unclaimed"]]);
-    expect(items[1].tools.map((t) => [t.id, t.status])).toEqual([[2, "stale"]]);
+  it("ranks validators by signed tools only; stale claims are listed but do not count", () => {
+    const claims = [live(1, "A", "active"), live(3, "A", "stale"), live(2, "C", "stale")];
+    const { items, total } = buildLeaderboard(validators, claims, tools, 1, 10);
+    expect(total).toBe(1); // C has only a stale claim: not ranked
+    expect(items[0].validator.identity).toBe("A");
+    expect(items[0]).toMatchObject({ toolCount: 1, claimedCount: 1 });
+    expect(items[0].tools.map((t) => [t.id, t.status])).toEqual([[1, "signed"], [3, "stale"]]);
     expect(items[0].validator.activatedStake).toBe("10");
   });
 
+  it("never attributes anything to a validator without its own claim (seed names are untrusted)", () => {
+    // a validator named like another one, with no claim of its own, gets nothing
+    const { items } = buildLeaderboard([vrow("X", "Alpha", 1n), vrow("A", "Alpha", 10n)], [live(1, "A", "active")], tools, 1, 10);
+    expect(items.map((r) => r.validator.identity)).toEqual(["A"]);
+  });
+
+  it("ignores pending claims and unknown tools", () => {
+    expect(buildLeaderboard(validators, [live(1, "A", "pending"), live(99, "B", "active")], tools, 1, 10).total).toBe(0);
+  });
+
   it("breaks ties by stake and paginates", () => {
-    const rows = buildLeaderboard(validators, [{ toolId: 1, identity: "A", cluster: "mainnet", status: "active" as const }, { toolId: 1, identity: "B", cluster: "mainnet", status: "active" as const }], [], tools, 1, 1);
+    const claims = [live(1, "A", "active"), live(1, "B", "active")];
+    const rows = buildLeaderboard(validators, claims, tools, 1, 1);
     expect(rows.total).toBe(2);
     expect(rows.items[0].validator.identity).toBe("B");
-    const p2 = buildLeaderboard(validators, [{ toolId: 1, identity: "A", cluster: "mainnet", status: "active" as const }, { toolId: 1, identity: "B", cluster: "mainnet", status: "active" as const }], [], tools, 2, 1);
-    expect(p2.items[0].validator.identity).toBe("A");
+    expect(buildLeaderboard(validators, claims, tools, 2, 1).items[0].validator.identity).toBe("A");
   });
 });
 

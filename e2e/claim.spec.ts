@@ -57,6 +57,7 @@ test("wizard: valid CLI signature verifies and registers end to end", async ({ p
   await page.goto("/");
   await expect(page.getByRole("img", { name: /^8 tools built by validators/ })).toBeVisible();
   await expect(page.locator("tbody tr", { hasText: "SunshineVR" })).toContainText("Signed");
+  await expect(page.locator("tbody tr")).toHaveCount(3);
   const reg = await (await page.request.get("/registry.json")).json();
   const entry = reg.entries.find((e: { message: string }) => e.message === valid.message);
   expect(entry).toMatchObject({ identity: fixture.identity, cluster: "mainnet", signature: valid.signature, status: "active" });

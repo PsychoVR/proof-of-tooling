@@ -6,7 +6,7 @@ import { processClaim } from "@/lib/claims-service";
 import { createRateLimiter } from "@/lib/rate-limit";
 import { sanitizeText } from "@/lib/text";
 import { getClientIp } from "@/lib/client-ip";
-import { parseClaimMessage } from "@/lib/claims";
+import { parseClaimMessage, verifyClaimSignature } from "@/lib/claims";
 
 const bodySchema = z.object({
   message: z.string().min(1).max(1300),
@@ -59,9 +59,14 @@ export async function handleClaimRequest(req: Request, persist: boolean) {
   }
   const body = bodySchema.safeParse(json);
   if (!body.success) return NextResponse.json({ error: "invalid body" }, { status: 400 });
-  // Messages that do not parse are rejected by the pipeline and only count against the IP.
+  // Identities are public, so an unsigned message must never spend a validator's bucket: only a
+  // correctly signed one is charged (the check is a single cheap Ed25519 verification). Everything
+  // else counts against the IP limiter above only.
   const identity = parseClaimMessage(body.data.message)?.identity;
-  if (identity && !(persist ? allowWriteIdentity : allowCheckIdentity)(identity)) return tooMany();
+  if (identity) {
+    const signed = verifyClaimSignature({ message: body.data.message, signature: body.data.signature, identity }).ok;
+    if (signed && !(persist ? allowWriteIdentity : allowCheckIdentity)(identity)) return tooMany();
+  }
   let result;
   try {
     result = await processClaim(body.data, createClaimsDeps(), persist);

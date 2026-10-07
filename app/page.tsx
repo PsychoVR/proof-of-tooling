@@ -4,8 +4,11 @@ import { KpiStrip } from "@/components/KpiStrip";
 import { Leaderboard } from "@/components/Leaderboard";
 import { Odometer } from "@/components/Odometer";
 import { StatusStack } from "@/components/StatusStack";
+import type { Metadata } from "next";
 import { getLeaderboard, getStats, getTools } from "@/lib/queries";
+import { pageMetadata } from "@/lib/seo";
 
+export const metadata: Metadata = pageMetadata({ path: "/" });
 export const dynamic = "force-dynamic";
 
 export default async function Home() {

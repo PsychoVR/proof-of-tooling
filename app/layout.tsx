@@ -4,10 +4,12 @@ import { Big_Shoulders, Hanken_Grotesk, JetBrains_Mono } from "next/font/google"
 import "./globals.css";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
+import { pageMetadata, SITE_NAME, SITE_URL } from "@/lib/seo";
 
 export const metadata: Metadata = {
-  title: { default: "Proof of Tooling", template: "%s | Proof of Tooling" },
-  description: "A tool that counts the tools validators build. Including this one.",
+  metadataBase: new URL(SITE_URL),
+  title: { default: SITE_NAME, template: `%s | ${SITE_NAME}` },
+  ...pageMetadata({}),
 };
 
 // Self-hosted at build time: no request to Google at runtime, so the CSP needs no external font origins.

@@ -5,6 +5,7 @@ import { StatusPill } from "@/components/StatusPill";
 import { UnclaimedBy } from "@/components/UnclaimedBy";
 import { toolDisplayUrl } from "@/lib/claims/message";
 import { getToolBySlug } from "@/lib/queries";
+import { pageMetadata } from "@/lib/seo";
 import { parseSlugParam } from "@/lib/ui/params";
 import type { ToolWithClaims } from "@/lib/types";
 import { formatDate, safeHttpUrl, shortKey, toolPillStatus } from "@/lib/ui/format";
@@ -22,7 +23,18 @@ function usersOf(tool: ToolWithClaims): { identity: string | null; name: string 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const slug = parseSlugParam((await params).slug);
   const tool = slug ? await getToolBySlug(slug) : null;
-  return { title: tool ? tool.name : "Tool not found" };
+  if (!tool || !slug) return { title: "Tool not found", robots: { index: false } };
+  const who =
+    tool.status === "claimed"
+      ? `Claimed by ${tool.claimedBy.length === 1 ? "a validator" : `${tool.claimedBy.length} validators`}`
+      : tool.owner
+        ? `Built by ${tool.owner.name} (unclaimed)`
+        : "Unclaimed";
+  return pageMetadata({
+    title: tool.name,
+    description: `${tool.name} is a ${tool.category.toLowerCase()} tool in the Proof of Tooling directory of tools built by Solana validators. ${who}.`,
+    path: `/t/${slug}`,
+  });
 }
 
 export default async function ToolPage({ params }: Props) {

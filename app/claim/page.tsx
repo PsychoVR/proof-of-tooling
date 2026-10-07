@@ -1,7 +1,13 @@
 import type { Metadata } from "next";
 import { ClaimWizard } from "@/components/ClaimWizard";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = { title: "Claim a tool" };
+export const metadata: Metadata = pageMetadata({
+  title: "Claim a tool",
+  description:
+    "Prove you built a tool: sign one line with your validator identity using the Solana CLI and add a proof file to the repo or site. Your keypair never leaves your machine.",
+  path: "/claim",
+});
 
 export default function ClaimPage() {
   return (

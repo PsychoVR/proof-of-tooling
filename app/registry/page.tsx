@@ -2,9 +2,15 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { MULTI_CLUSTER } from "@/lib/clusters";
 import { getRegistry } from "@/lib/queries";
+import { pageMetadata } from "@/lib/seo";
 import { shortKey } from "@/lib/ui/format";
 
-export const metadata: Metadata = { title: "Registry" };
+export const metadata: Metadata = pageMetadata({
+  title: "Registry",
+  description:
+    "Every verified claim in one downloadable file, with its message and signature, so anyone can re-verify it without trusting this site.",
+  path: "/registry",
+});
 export const dynamic = "force-dynamic";
 
 export default async function RegistryPage() {

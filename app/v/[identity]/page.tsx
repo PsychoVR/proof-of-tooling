@@ -6,6 +6,7 @@ import { CodeBlock } from "@/components/CodeBlock";
 import { StatusPill } from "@/components/StatusPill";
 import { ToolChip } from "@/components/ToolChip";
 import { getValidatorProfile } from "@/lib/queries";
+import { pageMetadata } from "@/lib/seo";
 import { parseIdentityParam } from "@/lib/ui/params";
 import { MULTI_CLUSTER } from "@/lib/clusters";
 import { CLUSTER_LABEL, displayName, formatDate, formatStake, safeHttpUrl, shortKey, toolPillStatus } from "@/lib/ui/format";
@@ -17,7 +18,14 @@ type Props = { params: Promise<{ identity: string }> };
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const id = parseIdentityParam((await params).identity);
   const profile = id ? await getValidatorProfile(id) : null;
-  return { title: profile ? displayName(profile.validator) : "Validator not found" };
+  if (!profile || !id) return { title: "Validator not found", robots: { index: false } };
+  const name = displayName(profile.validator);
+  const signed = profile.tools.filter((t) => t.claimedBy.some((c) => c.identity === id)).length;
+  return pageMetadata({
+    title: name,
+    description: `${name} on Proof of Tooling: ${signed === 0 ? "no signed tools yet" : `${signed} ${signed === 1 ? "tool" : "tools"} signed with its validator identity`}.`,
+    path: `/v/${id}`,
+  });
 }
 
 export default async function ValidatorPage({ params }: Props) {

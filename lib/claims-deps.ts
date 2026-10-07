@@ -57,6 +57,24 @@ const toClaim = (r: ClaimRow): Claim => ({
 
 const slugOf = (url: string) => url.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 128);
 
+/**
+ * Test double for the Playwright suite: fixed clock and canned network answers, real database.
+ * Needs E2E_CLAIMS_STUB=1 and only works against the local docker database (localhost:3307),
+ * so it cannot be switched on by accident anywhere else.
+ */
+function e2eOverrides(): Partial<ClaimsDeps> | null {
+  if (process.env.E2E_CLAIMS_STUB !== "1") return null;
+  const db = new URL(getEnv().DATABASE_URL);
+  if (db.hostname !== "localhost" && db.hostname !== "127.0.0.1") return null;
+  if (db.port !== "3307") return null;
+  const identities = (process.env.E2E_PROOF_IDENTITIES ?? "").split(",").filter(Boolean);
+  return {
+    now: () => new Date(process.env.E2E_NOW ?? "2026-10-07T12:00:00Z"),
+    fetcher: async () => ({ status: 200, body: JSON.stringify({ identities }) }),
+    getRepoMetadata: async () => ({ isPrivate: false, archived: false, isFork: false, commitCount: 40, ownCommits: 40, createdAt: "2026-01-01T00:00:00Z" }),
+  };
+}
+
 export function createClaimsDeps(): ClaimsDeps {
   return {
     now: () => new Date(),
@@ -97,5 +115,6 @@ export function createClaimsDeps(): ClaimsDeps {
       const [row] = await db.select().from(claims).where(and(eq(claims.toolId, tool.id), eq(claims.identity, input.identity)));
       return toClaim(row);
     },
+    ...e2eOverrides(),
   };
 }

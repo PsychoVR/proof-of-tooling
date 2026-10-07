@@ -5,6 +5,7 @@ export default defineConfig({
   resolve: { alias: { "@": path.resolve(__dirname) } },
   test: {
     include: ["tests/**/*.test.ts"],
+    exclude: ["tests/db/**", "node_modules/**"],
     coverage: {
       provider: "v8",
       include: ["lib/claims/**/*.ts"],

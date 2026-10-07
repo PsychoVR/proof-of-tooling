@@ -27,5 +27,6 @@ export async function handleClaimRequest(req: Request, persist: boolean) {
   const body = bodySchema.safeParse(json);
   if (!body.success) return NextResponse.json({ error: "invalid body" }, { status: 400 });
   const result = await processClaim(body.data, createClaimsDeps(), persist);
-  return NextResponse.json(result, { status: result.ok ? 200 : 422 });
+  // A dry run reports failed steps in the body; only a real registration attempt is an HTTP error.
+  return NextResponse.json(result, { status: result.ok || !persist ? 200 : 422 });
 }

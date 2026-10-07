@@ -49,11 +49,15 @@ async function withClaims(toolRows: ToolRow[]): Promise<ToolWithClaims[]> {
 
 export async function getStats(): Promise<Stats> {
   const db = getDb();
-  const [toolRows, activeClaims, [v]] = await Promise.all([
+  const [allTools, activeClaims, seedRows, [v]] = await Promise.all([
     db.select({ id: tools.id, category: tools.category }).from(tools),
     db.select({ toolId: claims.toolId, identity: claims.identity }).from(claims).where(eq(claims.status, "active")),
+    db.select({ toolId: seedEntries.toolId }).from(seedEntries),
     db.select({ total: sql<number>`count(*)`, updatedAt: max(validators.updatedAt) }).from(validators),
   ]);
+  // A tool counts when it is seeded or has an active claim; pending, stale-only and withdrawn ones do not.
+  const counted = new Set([...activeClaims.map((c) => c.toolId), ...seedRows.map((s) => s.toolId)]);
+  const toolRows = allTools.filter((t) => counted.has(t.id));
   return buildStats(toolRows, activeClaims, Number(v?.total ?? 0), v?.updatedAt ?? null);
 }
 
@@ -135,7 +139,9 @@ export async function getTools(opts: {
     .from(tools)
     .where(opts.category ? eq(tools.category, opts.category) : undefined)
     .orderBy(tools.name);
-  const all = await withClaims(rows);
+  // An owner exists only for seeded tools or tools with an active or stale claim, so
+  // pending-only (and withdrawn or rejected) ones stay out of the public listing.
+  const all = (await withClaims(rows)).filter((t) => t.owner !== null);
   return opts.status ? all.filter((t) => t.status === opts.status) : all;
 }
 

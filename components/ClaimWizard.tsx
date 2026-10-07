@@ -1,10 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CATEGORIES, type Category, type ClaimCheckResponse, type ClaimResponse } from "@/lib/types";
 import {
   CHECK_LABELS,
   buildClaimMessage,
+  githubNewFileUrl,
+  proofHint,
+  proofJson,
+  proofTarget,
   checkClaim,
   registerClaim,
   signCommand,
@@ -13,6 +17,7 @@ import {
 } from "@/lib/ui/claim";
 import { CodeBlock } from "./CodeBlock";
 
+const PROOF_FILE = ".proof-of-tooling.json";
 const STEPS = ["Describe the tool", "Sign the claim", "Verify the signature"];
 
 export function ClaimWizard() {
@@ -32,6 +37,19 @@ export function ClaimWizard() {
   const urlErr = validateToolUrl(url);
   const idErr = validateIdentity(identity);
   const message = buildClaimMessage(url, identity, date);
+  const target = proofTarget(url);
+  const [branch, setBranch] = useState("main");
+  const repoKey = target?.kind === "repo" ? `${target.owner}/${target.repo}` : null;
+  // Default branch of the repo, only to prefill the GitHub link; falls back to "main".
+  useEffect(() => {
+    if (!repoKey || step !== 1) return;
+    const ctl = new AbortController();
+    fetch(`https://api.github.com/repos/${repoKey}`, { signal: ctl.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { default_branch?: string } | null) => { if (j?.default_branch) setBranch(j.default_branch); })
+      .catch(() => {});
+    return () => ctl.abort();
+  }, [repoKey, step]);
   const request = { message, signature: signature.trim(), category, toolName: toolName.trim() };
 
   const next = () => {
@@ -119,8 +137,34 @@ export function ClaimWizard() {
             <span className="num" aria-hidden="true">2</span>
             <h2>Sign the claim</h2>
           </div>
+          {target && (
+            <section className="proof-block" aria-labelledby="prove-h">
+              <h3 id="prove-h">Prove you own this tool</h3>
+              {target.kind === "repo" ? (
+                <>
+                  <p className="lede">
+                    Add a file named <code>{PROOF_FILE}</code> to the root of {target.owner}/{target.repo} with this content.
+                    It must be on the default branch before you verify.
+                  </p>
+                  <CodeBlock text={proofJson(identity)} />
+                  <div className="btns">
+                    <a className="btn" href={githubNewFileUrl(target.owner, target.repo, branch, identity)} target="_blank" rel="noopener noreferrer">
+                      Create proof file on GitHub
+                    </a>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="lede">
+                    Serve this JSON at exactly <code>{target.where}</code>. It covers every URL under {target.host}.
+                  </p>
+                  <CodeBlock text={proofJson(identity)} />
+                </>
+              )}
+            </section>
+          )}
           <p className="lede">
-            Run this on the machine that holds your identity keypair. It signs one line and prints a base58
+            Then run the machine that holds your identity keypair. It signs one line and prints a base58
             signature. Nothing leaves your machine, and we never ask for the keypair.
           </p>
           <CodeBlock text={signCommand(message)} />
@@ -165,6 +209,7 @@ export function ClaimWizard() {
                     <li key={c.id} className={c.ok ? "" : "x"}>
                       {CHECK_LABELS[c.id]}
                       {c.detail ? ` (${c.detail})` : ""}
+                      {c.id === "proof" && !c.ok && proofHint(url) ? ` ${proofHint(url)}` : ""}
                     </li>
                   ))}
                 </ul>

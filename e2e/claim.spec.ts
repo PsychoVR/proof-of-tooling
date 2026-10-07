@@ -34,6 +34,11 @@ test("wizard: valid CLI signature verifies and registers end to end", async ({ p
 
   // Step 2 shows exactly the line the CLI signed in the fixture (URL normalized, today's date).
   await expect(page.getByText(valid.message).first()).toBeVisible();
+  // The ownership block comes before signing, with the prefilled GitHub link and the JSON to copy.
+  await expect(page.getByRole("heading", { name: "Prove you own this tool" })).toBeVisible();
+  const link = page.getByRole("link", { name: "Create proof file on GitHub" });
+  await expect(link).toHaveAttribute("href", /^https:\/\/github\.com\/psychovr\/proof-of-tooling\/new\/[^?]+\?filename=\.proof-of-tooling\.json&value=/);
+  await expect(page.getByText(`"identities"`).first()).toBeVisible();
   await page.getByRole("button", { name: "I have the signature" }).click();
 
   // A signature for a different message fails the check.

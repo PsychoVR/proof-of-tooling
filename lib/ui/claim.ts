@@ -52,6 +52,40 @@ export function buildClaimMessage(toolUrl: string, identity: string, date: strin
   return `proof-of-tooling v1 | claim | ${normalizeToolUrl(toolUrl)} | ${identity.trim()} | ${date}`;
 }
 
+const GH_REPO = /^github\.com\/([A-Za-z0-9][A-Za-z0-9-]{0,38})\/([A-Za-z0-9._-]{1,100})$/;
+export const PROOF_FILE_NAME = ".proof-of-tooling.json";
+
+/** Contents of the proof file for an identity, pretty-printed for copying. */
+export function proofJson(identity: string): string {
+  return JSON.stringify({ identities: [identity.trim()] }, null, 2) + "\n";
+}
+
+export type ProofTarget =
+  | { kind: "repo"; owner: string; repo: string; where: string }
+  | { kind: "web"; host: string; where: string };
+
+/** Where the proof file must live for a canonical tool URL (what the server will fetch). */
+export function proofTarget(toolUrl: string): ProofTarget | null {
+  const n = normalizeToolUrl(toolUrl);
+  const gh = GH_REPO.exec(n);
+  if (gh) return { kind: "repo", owner: gh[1], repo: gh[2], where: `${n}/${PROOF_FILE_NAME}` + " (root of the default branch)" };
+  const host = n.split("/")[0];
+  if (!host.includes(".") || host === "github.com") return null;
+  return { kind: "web", host, where: `https://${host}/.well-known/proof-of-tooling.json` };
+}
+
+/** GitHub "new file" page with name and contents already filled in. */
+export function githubNewFileUrl(owner: string, repo: string, branch: string, identity: string): string {
+  const q = new URLSearchParams({ filename: PROOF_FILE_NAME, value: proofJson(identity) });
+  return `https://github.com/${owner}/${repo}/new/${encodeURIComponent(branch)}?${q.toString().replace(/\+/g, "%20")}`;
+}
+
+/** Turns a failed proof check into a message that says which file is missing and where. */
+export function proofHint(toolUrl: string): string | null {
+  const t = proofTarget(toolUrl);
+  return t ? `Expected file: ${t.where}` : null;
+}
+
 export function signCommand(message: string): string {
   return `solana sign-offchain-message -k ~/validator-keypair.json "${message}"`;
 }

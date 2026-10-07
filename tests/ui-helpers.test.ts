@@ -45,3 +45,26 @@ describe("toolPillStatus", () => {
     expect(toolPillStatus(t("unclaimed", [{ status: "stale", identity: "A" }]))).toBe("unclaimed");
   });
 });
+
+import { githubNewFileUrl, proofHint, proofJson, proofTarget } from "@/lib/ui/claim";
+
+describe("proof file helpers", () => {
+  const id = "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin";
+  it("builds the proof JSON", () => {
+    expect(JSON.parse(proofJson(` ${id} `))).toEqual({ identities: [id] });
+  });
+  it("locates the proof file for repos and sites", () => {
+    expect(proofTarget("https://www.GitHub.com/you/tool/")).toMatchObject({ kind: "repo", owner: "you", repo: "tool" });
+    expect(proofTarget("pool.example.com/watch")).toMatchObject({ kind: "web", host: "pool.example.com", where: "https://pool.example.com/.well-known/proof-of-tooling.json" });
+    expect(proofTarget("nonsense")).toBeNull();
+    expect(proofHint("example.com")).toContain("https://example.com/.well-known/proof-of-tooling.json");
+    expect(proofHint("github.com/you/tool")).toContain("github.com/you/tool/.proof-of-tooling.json");
+    expect(proofHint("nonsense")).toBeNull();
+  });
+  it("prefills the GitHub new-file page", () => {
+    const u = new URL(githubNewFileUrl("you", "tool", "main", id));
+    expect(u.origin + u.pathname).toBe("https://github.com/you/tool/new/main");
+    expect(u.searchParams.get("filename")).toBe(".proof-of-tooling.json");
+    expect(JSON.parse(u.searchParams.get("value")!)).toEqual({ identities: [id] });
+  });
+});

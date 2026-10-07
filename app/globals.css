@@ -230,3 +230,6 @@ footer.site b { color: var(--fg); }
   .reel, .bar .fill { transition: none; }
   html { scroll-behavior: auto; }
 }
+.proof-block { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
+.proof-block h3 { font-size: 15px; }
+.proof-block code { font-family: var(--f-mono); font-size: 12.5px; }

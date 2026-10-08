@@ -30,7 +30,8 @@ test("pending list is paginated and validates its parameters (N2)", async ({ req
 });
 
 test("stake pool candidate endpoints are admin only and validate their input", async ({ request }) => {
-  for (const headers of [{}, { authorization: "Bearer nope" }, { authorization: "Bearer local-dev-cron-secret-0123456789abcdef" }]) {
+  const wrong: Record<string, string>[] = [{}, { authorization: "Bearer nope" }, { authorization: "Bearer local-dev-cron-secret-0123456789abcdef" }];
+  for (const headers of wrong) {
     expect((await request.get("/api/admin/pools/candidates", { headers })).status()).toBe(401);
     expect((await request.post(`/api/admin/pools/candidates/${"9".repeat(44)}/approve`, { headers, data: { name: "X", logoId: "jito" } })).status()).toBe(401);
     expect((await request.post(`/api/admin/pools/candidates/${"9".repeat(44)}/reject`, { headers })).status()).toBe(401);

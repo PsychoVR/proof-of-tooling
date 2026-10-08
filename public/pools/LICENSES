@@ -1,0 +1,22 @@
+Stake pool logos
+================
+
+Each logo is the pool's own mark, used only to identify that pool next to its name.
+Trademarks belong to their owners. PNGs were downscaled to 64x64 and palette-optimised; no other change.
+Retrieved 2026-10-08.
+
+jito.png        JitoSOL token logo, from the on-chain token metadata
+                (https://storage.googleapis.com/token-metadata/JitoSOL.json -> JitoSOL-256.png). Pool: jito.network.
+marinade.png    mSOL token logo, solana-labs/token-list (assets/mainnet/mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So/logo.png).
+                Pool: marinade.finance.
+blazestake.png  bSOL token logo, solana-labs/token-list (assets/mainnet/bSo13r4TkiE4KumL71LsHTPpL2euBYLFx6h9HP3piy1/logo.png).
+                Pool: stake.solblaze.org. The bSOL mint has no on-chain metadata.
+jpool.svg       JSOL token logo, referenced by the on-chain token metadata
+                (solana-labs/token-list assets/mainnet/7Q2afV64in6N6SeZsAAB81TJzwDoD6zpqmHkzi9Dcavn/logo.svg), unmodified. Pool: jpool.one.
+vault.png       vSOL token logo, from the on-chain token metadata (https://gateway.irys.xyz/A2h4aFwi2vW2yXbixX6mvwhWB7P5bebrDbVza9XkJxHv).
+                Pool: thevault.finance.
+aero.png        aeroSOL token logo, from the on-chain token metadata of the pool mint
+                (https://gateway.irys.xyz/AaPmmExF6YTsEDYJjru71CmhPcUpokmn8hoQZCar1orD). Pool: aeropool.io (Phase Labs).
+sanctum.png     Infinity (INF) token logo, Sanctum's flagship pool, from the on-chain token metadata
+                (https://arweave.net/O0ckxOiu_CCgjuxDdnloBwHKxFu-KH9kBJU0FemeGYI). Sanctum: sanctum.so.
+                Not a brand-kit file: swap for the official Sanctum mark if one is licensed.

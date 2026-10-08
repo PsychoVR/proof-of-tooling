@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ClaimWizard } from "@/components/ClaimWizard";
 import { pageMetadata } from "@/lib/seo";
+import { parseClaimPrefill } from "@/lib/ui/claim";
 
 export const metadata: Metadata = pageMetadata({
   title: "Claim a tool",
@@ -9,14 +10,15 @@ export const metadata: Metadata = pageMetadata({
   path: "/claim",
 });
 
-export default function ClaimPage() {
+export default async function ClaimPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const initial = parseClaimPrefill(await searchParams);
   return (
     <>
       <h1 className="page-title">Claim a tool</h1>
       <p className="lede" style={{ marginTop: 8 }}>
         Sign one line with your validator identity key. Three steps, and the keypair never leaves your machine.
       </p>
-      <ClaimWizard />
+      <ClaimWizard initial={initial} />
     </>
   );
 }

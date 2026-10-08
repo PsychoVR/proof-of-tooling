@@ -5,6 +5,7 @@ import { CATEGORIES, type Category, type ClaimCheckResponse, type ClaimResponse 
 import {
   CHECK_LABELS,
   buildClaimMessage,
+  type ClaimPrefill,
   githubNewFileUrl,
   proofHint,
   proofJson,
@@ -24,11 +25,11 @@ import { WebProofTabs } from "./WebProofTabs";
 const PROOF_FILE = ".proof-of-tooling.json";
 const STEPS = ["Describe the tool", "Sign the claim", "Verify the signature"];
 
-export function ClaimWizard() {
+export function ClaimWizard({ initial }: { initial?: ClaimPrefill }) {
   const [step, setStep] = useState(0);
-  const [toolName, setToolName] = useState("");
-  const [url, setUrl] = useState("");
-  const [category, setCategory] = useState<Category>("Monitoring");
+  const [toolName, setToolName] = useState(initial?.name ?? "");
+  const [url, setUrl] = useState(initial?.url ?? "");
+  const [category, setCategory] = useState<Category>(initial?.category ?? "Monitoring");
   const [identity, setIdentity] = useState("");
   const [signature, setSignature] = useState("");
   const [touched, setTouched] = useState(false);
@@ -124,10 +125,22 @@ export function ClaimWizard() {
           </div>
           <div className="field">
             <label htmlFor="c-id">Validator identity pubkey</label>
-            <input id="c-id" className="mono-in" value={identity} onChange={(e) => setIdentity(e.target.value)} placeholder="Identity, not the vote account" aria-invalid={touched && !!idErr} aria-describedby="c-id-e" autoComplete="off" spellCheck={false} />
+            <input id="c-id" className="mono-in" value={identity} onChange={(e) => setIdentity(e.target.value)} placeholder="Identity, not the vote account" aria-invalid={touched && !!idErr} aria-describedby="c-id-e" autoComplete="off" spellCheck={false} autoFocus={!!initial?.url} />
             <span id="c-id-e" className={touched && idErr ? "err" : "hint"}>
               {touched && idErr ? idErr : "Run solana-keygen pubkey on your identity keypair to print it."}
             </span>
+          </div>
+          <div aria-live="polite">
+            {!urlErr && !idErr && (
+              <section className="proof-block" aria-labelledby="preview-h">
+                <h3 id="preview-h">Your claim, ready to sign</h3>
+                <p className="lede">
+                  This line is signed with your identity keypair. The command prints a base58 signature to paste in step 3.
+                </p>
+                <CodeBlock text={signCommand(message)} label="Copy command" />
+                <p className="note">Dated {date} (UTC). Sign it today: the date is part of the message.</p>
+              </section>
+            )}
           </div>
           <div className="btns">
             <button type="submit" className="btn primary">Generate claim</button>

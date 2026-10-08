@@ -1,7 +1,7 @@
 // Claim wizard helpers: message building, input validation and the check client.
 import { normalizeToolUrl } from "@/lib/claims/message";
 import { SITE_URL, TWITTER_HANDLE } from "@/lib/seo";
-import type { ClaimCheckResponse, ClaimCheckResult, ClaimRequest, ClaimResponse } from "@/lib/types";
+import { CATEGORIES, type Category, type ClaimCheckResponse, type ClaimCheckResult, type ClaimRequest, type ClaimResponse } from "@/lib/types";
 
 const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
@@ -205,3 +205,28 @@ export function shareOnXUrl(toolName: string, pageUrl: string): string {
 
 /** Public URL of a tool page on the site. */
 export const toolPageUrl = (slug: string) => `${SITE_URL}/t/${slug}`;
+
+export interface ClaimPrefill {
+  url: string;
+  name: string;
+  category: Category;
+}
+
+/** Link to the claim form with the tool already filled in (used by "Claim this"). */
+export function claimLink(tool: { url: string; name: string; category: Category }): string {
+  return `/claim?${new URLSearchParams({ url: tool.url, name: tool.name, category: tool.category }).toString()}`;
+}
+
+type Param = string | string[] | undefined;
+const first = (v: Param) => (Array.isArray(v) ? v[0] : v) ?? "";
+
+/** Reads /claim?url=&name=&category= defensively: anything invalid is dropped, never an error. */
+export function parseClaimPrefill(params: Record<string, Param>): ClaimPrefill {
+  const rawUrl = first(params.url).trim().slice(0, 300);
+  const category = first(params.category);
+  return {
+    url: rawUrl && !validateToolUrl(rawUrl) ? normalizeToolUrl(rawUrl) : "",
+    name: first(params.name).replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 80),
+    category: (CATEGORIES as readonly string[]).includes(category) ? (category as Category) : "Monitoring",
+  };
+}

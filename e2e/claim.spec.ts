@@ -125,3 +125,42 @@ test("unclaim with the real fixture withdraws the claim", async ({ request }) =>
   const reg = await (await request.get("/registry.json")).json();
   expect(reg.entries.find((e: { message: string }) => e.message === valid.message)).toBeUndefined();
 });
+
+test.describe("claim links", () => {
+  test("'Claim this' on the home list and the tool page opens the form with the tool filled in", async ({ page }) => {
+    await page.goto("/");
+    const row = page.locator("#unclaimed li", { hasText: "Alpenglow Explorer" });
+    await row.getByRole("link", { name: "Claim Alpenglow Explorer" }).click();
+    await expect(page).toHaveURL(/\/claim\?url=.+&name=Alpenglow\+Explorer&category=/);
+    await expect(page.locator("#c-name")).toHaveValue("Alpenglow Explorer");
+    await expect(page.locator("#c-url")).not.toHaveValue("");
+
+    await page.goto("/t/alpenglow-explorer");
+    await page.getByRole("link", { name: "Claim this" }).click();
+    await expect(page.locator("#c-name")).toHaveValue("Alpenglow Explorer");
+  });
+
+  test("a direct /claim?url= link prefills the form and builds the message as soon as the identity is typed", async ({ page }) => {
+    await page.clock.setFixedTime(new Date("2026-10-07T12:00:00Z"));
+    await gotoHydrated(page, `/claim?url=${encodeURIComponent(`https://www.${TOOL}/`)}&name=Proof%20of%20Tooling&category=Meta`);
+    await expect(page.locator("#c-url")).toHaveValue(TOOL);
+    await expect(page.locator("#c-cat")).toHaveValue("Meta");
+    await expect(page.getByText("Your claim, ready to sign")).toHaveCount(0); // no identity yet
+
+    await expect(page.locator("#c-id")).toBeFocused();
+    await page.locator("#c-id").fill(fixture.identity);
+    await expect(page.getByText("Your claim, ready to sign")).toBeVisible();
+    const command = `solana sign-offchain-message -k ~/validator-keypair.json "${valid.message}"`;
+    await expect(page.getByText(command)).toBeVisible();
+
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+    await page.getByRole("button", { name: "Copy command to clipboard" }).click();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(command);
+  });
+
+  test("invalid prefill values are ignored", async ({ page }) => {
+    await gotoHydrated(page, `/claim?url=${encodeURIComponent('x"; rm -rf /')}&category=Nope&name=%00ok`);
+    await expect(page.locator("#c-url")).toHaveValue("");
+    await expect(page.locator("#c-cat")).toHaveValue("Monitoring");
+  });
+});

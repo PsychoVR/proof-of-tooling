@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ENABLED_CLUSTERS, MULTI_CLUSTER } from "@/lib/clusters";
 import { CATEGORIES, type Category, type Cluster, type LeaderboardRow, type ToolWithClaims } from "@/lib/types";
+import { claimLink } from "@/lib/ui/claim";
 import { CLUSTER_LABEL, displayName, safeHttpUrl, shortKey } from "@/lib/ui/format";
 import { Avatar } from "./Avatar";
 import { StatusPill } from "./StatusPill";
@@ -196,6 +197,8 @@ export function Leaderboard({ rows, unclaimed }: { rows: LeaderboardRow[]; uncla
               <li key={t.id}>
                 <ToolChip tool={t} />
                 <UnclaimedBy name={t.owner?.name ?? "an unknown validator"} sourceUrl={t.owner?.sourceUrl ?? null} />
+                {" · "}
+                <Link className="linkplain" href={claimLink(t)} aria-label={`Claim ${t.name}`}>Claim this</Link>
               </li>
             ))}
           </ul>

@@ -6,6 +6,7 @@ import { UnclaimedBy } from "@/components/UnclaimedBy";
 import { toolDisplayUrl } from "@/lib/claims/message";
 import { getToolBySlug } from "@/lib/queries";
 import { pageMetadata } from "@/lib/seo";
+import { claimLink } from "@/lib/ui/claim";
 import { parseSlugParam } from "@/lib/ui/params";
 import type { ToolWithClaims } from "@/lib/types";
 import { formatDate, safeHttpUrl, shortKey, toolPillStatus } from "@/lib/ui/format";
@@ -52,6 +53,11 @@ export default async function ToolPage({ params }: Props) {
         <span className="tool"><span className="cat">{tool.category}</span></span>{" "}
         <StatusPill status={toolPillStatus(tool)} />
       </p>
+      {tool.status === "unclaimed" && (
+        <p style={{ margin: "16px 0 0" }}>
+          <Link className="btn primary" href={claimLink(tool)}>Claim this</Link>
+        </p>
+      )}
 
       <div className="grid2" style={{ marginTop: 24 }}>
         <section className="panel" aria-labelledby="about-h">

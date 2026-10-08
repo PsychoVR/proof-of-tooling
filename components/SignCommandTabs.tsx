@@ -22,8 +22,8 @@ export function SignCommandTabs({ message, identity }: { message: string; identi
       <p className="lede">
         Sign with your <strong>identity</strong> keypair (the one <code>solana-keygen pubkey</code> prints as{" "}
         <code>{identity}</code>). Not the vote account key and not the withdrawer key: those will fail the signature check.
-        You need a Solana (Agave) CLI recent enough to include <code>sign-offchain-message</code>; if{" "}
-        <code>solana sign-offchain-message --help</code> works, you are set.
+        You need Agave CLI 2.0 or newer, which includes <code>sign-offchain-message</code>. To check, run{" "}
+        <code>solana sign-offchain-message --help</code>: if it prints help, you are set.
       </p>
       <div role="tablist" aria-label="Ways to sign the claim" className="tablist">
         {SIGN_METHODS.map((m, i) => (

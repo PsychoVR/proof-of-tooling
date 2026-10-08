@@ -45,6 +45,10 @@ export const STAKE_POOLS: readonly StakePoolDef[] = [
     authorities: [{ kind: "spl-pool", pool: "stk9ApL5HeVAwPLr3TLhDXdZS8ptVu7zp6ov8HFDuMi", program: SPL_STAKE_POOL_PROGRAM }],
   },
   {
+    // Jito spreads its stake almost evenly: on 2026-10-08 (epoch 1052) its ValidatorList held ~31,681.5 SOL for each of
+    // many validators (e.g. 3iPuTg... 31,681.5485 SOL, 644K33... 31,681.5667 SOL). Our scan, summing active stake
+    // accounts, got 31,681.5468 / 31,681.5650 SOL for those two (within 0.01 %), so identical figures across
+    // validators are real and not an attribution bug.
     id: "jito",
     name: "Jito",
     logo: "/pools/jito.png",

@@ -1,4 +1,4 @@
-import { count, desc, eq } from "drizzle-orm";
+import { count, desc, eq, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { POOL_CANDIDATE_STATUSES, poolCandidates } from "@/db/schema";
@@ -18,6 +18,12 @@ const BASE58_ADDRESS = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 export interface CandidateRow {
   pool: string;
   poolMint: string;
+  /** Token name from the mint's metadata. Third-party text, sanitized: display only. */
+  mintName: string | null;
+  /** Validators with real stake from this pool, as measured when it was found. */
+  validators: number | null;
+  /** Active stake across them, in whole SOL (rounded down). */
+  totalStakeSol: number | null;
   validatorList: string;
   withdrawAuthority: string;
   program: string;
@@ -37,19 +43,25 @@ export interface CandidatePage {
   offset: number;
 }
 
-/** Candidates of one status (pending by default), newest first, one page at a time. */
+/** Candidates of one status (pending by default), largest total stake first, one page at a time. */
 export async function listCandidates(opts: { status?: CandidateStatus; limit?: number; offset?: number } = {}): Promise<CandidatePage> {
   const status = opts.status ?? "pending";
   const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, Math.floor(opts.limit ?? DEFAULT_PAGE_SIZE)));
   const offset = Math.max(0, Math.floor(opts.offset ?? 0));
   const [{ total }] = await getDb().select({ total: count() }).from(poolCandidates).where(eq(poolCandidates.status, status));
-  const items = await getDb()
+  const rows = await getDb()
     .select()
     .from(poolCandidates)
     .where(eq(poolCandidates.status, status))
-    .orderBy(desc(poolCandidates.firstSeen), poolCandidates.pool)
+    // Rows never measured (decided before measuring existed) go last.
+    .orderBy(sql`${poolCandidates.totalStakeLamports} IS NULL`, desc(poolCandidates.totalStakeLamports), poolCandidates.pool)
     .limit(limit)
     .offset(offset);
+  const items = rows.map(({ validatorsCount, totalStakeLamports, ...r }) => ({
+    ...r,
+    validators: validatorsCount,
+    totalStakeSol: totalStakeLamports === null ? null : Number(totalStakeLamports / 1_000_000_000n),
+  }));
   return { items, total, limit, offset };
 }
 

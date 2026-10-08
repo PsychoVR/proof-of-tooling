@@ -28,7 +28,16 @@ import {
   U64_MAX,
 } from "@/lib/solana/pool-stake";
 import { fetchSfdpApproved, parseSfdpApproved } from "@/lib/solana/sfdp";
-import { discoverStakePools, parseStakePool } from "@/lib/solana/pool-discovery";
+import {
+  discoverStakePools,
+  measureCandidate,
+  mayQualify,
+  MIN_CANDIDATE_LAMPORTS,
+  parseMetaplexName,
+  parseStakePool,
+  qualifiesAsCandidate,
+  summarizeValidatorList,
+} from "@/lib/solana/pool-discovery";
 
 const EPOCH = accountsFixture.epoch;
 type Fx = (typeof accountsFixture.accounts)[number];
@@ -282,9 +291,11 @@ describe("sfdp", () => {
   });
 });
 
+const jitoRaw = poolsFixture.accounts.find((a) => a.pubkey === "Jito4APyf642JPZPx3hGc6WWJ8zPKtRbRs4P815Awbb")!;
+
 describe("pool discovery", () => {
   const raw = poolsFixture.accounts;
-  const jito = raw.find((a) => a.pubkey === "Jito4APyf642JPZPx3hGc6WWJ8zPKtRbRs4P815Awbb")!;
+  const jito = jitoRaw;
 
   it("parses a real StakePool account", () => {
     const c = parseStakePool(jito.pubkey, SPL_STAKE_POOL_PROGRAM, Buffer.from(jito.account.data[0], "base64"))!;
@@ -311,5 +322,119 @@ describe("pool discovery", () => {
     expect(params[0]).toBe(SPL_STAKE_POOL_PROGRAM);
     expect((params[1] as { filters: unknown[] }).filters).toEqual([{ memcmp: { offset: 0, bytes: "2" } }]);
     await expect(discoverStakePools(SPL_STAKE_POOL_PROGRAM, { rpcUrl: "https://x", fetchImpl: okFetch("nope") })).rejects.toThrow("unexpected shape");
+  });
+});
+
+describe("candidate measurement", () => {
+  const SOL = 1_000_000_000n;
+  /** A ValidatorList account: header (type 2, max, length) and 73-byte entries starting with active_stake_lamports. */
+  function list(activeSol: (number | bigint)[], type = 2): Buffer {
+    const b = Buffer.alloc(9 + activeSol.length * 73);
+    b[0] = type;
+    b.writeUInt32LE(100, 1);
+    b.writeUInt32LE(activeSol.length, 5);
+    activeSol.forEach((sol, i) => {
+      const o = 9 + i * 73;
+      b.writeBigUInt64LE(typeof sol === "bigint" ? sol : BigInt(Math.round(sol * 1e9)), o);
+      b.writeBigUInt64LE(7n * SOL, o + 8); // transient stake never counts
+    });
+    return b;
+  }
+
+  it("sums active stake and counts validators with at least 1 SOL", () => {
+    expect(summarizeValidatorList(list([5000, 4000, 1000, 0.00266624, 0]))).toEqual({ validators: 3, activeLamports: BigInt(Math.round(10000.00266624 * 1e9)) });
+    expect(summarizeValidatorList(list([]))).toEqual({ validators: 0, activeLamports: 0n });
+  });
+
+  it("rejects lists of another type, truncated lists and absurd lengths", () => {
+    expect(summarizeValidatorList(list([1], 1))).toBeNull();
+    expect(summarizeValidatorList(list([1000, 1000]).subarray(0, 100))).toBeNull();
+    expect(summarizeValidatorList(new Uint8Array(4))).toBeNull();
+    const huge = list([1]);
+    huge.writeUInt32LE(0xffffffff, 5);
+    expect(summarizeValidatorList(huge)).toBeNull();
+  });
+
+  it("needs 3 distinct validators and 10,000 SOL, nothing less", () => {
+    const q = (v: number, sol: bigint) => qualifiesAsCandidate({ validators: v, activeLamports: sol * SOL });
+    expect(q(3, 10_000n)).toBe(true);
+    expect(q(2, 1_000_000n)).toBe(false); // a one- or two-validator LST is not a candidate
+    expect(q(1, 1_000_000n)).toBe(false);
+    expect(q(50, 9_999n)).toBe(false);
+    expect(MIN_CANDIDATE_LAMPORTS).toBe(10_000n * SOL);
+  });
+
+  it("reads total_lamports from the StakePool prefix and uses it as a free pre-filter", () => {
+    const real = Buffer.from(jitoRaw.account.data[0], "base64"); // the recorded Jito account (~10.44M SOL total)
+    expect(parseStakePool("p", SPL_STAKE_POOL_PROGRAM, real)!.totalLamports).toBe(10_441_891_934_944_817n);
+    const base = real.subarray(0, 194); // a prefix without total_lamports
+    expect(parseStakePool("p", SPL_STAKE_POOL_PROGRAM, base)!.totalLamports).toBeNull();
+    const full = Buffer.alloc(266);
+    base.copy(full);
+    full.writeBigUInt64LE(25_000n * SOL, 258);
+    const c = parseStakePool("p", SPL_STAKE_POOL_PROGRAM, full)!;
+    expect(c.totalLamports).toBe(25_000n * SOL);
+    expect(mayQualify(c)).toBe(true);
+    expect(mayQualify({ totalLamports: 9_999n * SOL })).toBe(false);
+    expect(mayQualify({ totalLamports: null })).toBe(true);
+  });
+
+  // Header of the real Jito token metadata account (8yn5oqFM...); the name is padded to 32 bytes as on chain.
+  const META_HEAD = Buffer.from("BMRMC0OCUN+z22qnNe6j9AhUAxTVLRTZvX0pK6xUPI62/NFB6YMsrxCtkXSVyg8nG1spPNRwJ+pzcAftQOs5oL0g", "base64");
+  const meta = (name: string) => {
+    const nameBytes = Buffer.from(name, "utf8");
+    const len = Buffer.alloc(4);
+    len.writeUInt32LE(32);
+    return Buffer.concat([META_HEAD.subarray(0, 65), len, nameBytes, Buffer.alloc(32 - nameBytes.length), Buffer.alloc(40)]);
+  };
+
+  it("parses and sanitizes the token name from Metaplex metadata", () => {
+    expect(parseMetaplexName(meta("Jito Staked SOL"))).toBe("Jito Staked SOL");
+    expect(parseMetaplexName(meta("A\u202EB\u200Bevil"))).toBe("A B evil");
+    expect(parseMetaplexName(meta(""))).toBeNull();
+    expect(parseMetaplexName(new Uint8Array(10))).toBeNull();
+    const lying = meta("x");
+    lying.writeUInt32LE(5000, 65);
+    expect(parseMetaplexName(lying)).toBeNull();
+  });
+
+  const META_PDA = "8yn5oqFMwYA8SgGqWwKq1Hia8aM5gh1DWmHEL34hMqBX";
+  const rpc = (replies: Record<string, Buffer>, seen: string[] = []) => ({
+    rpcUrl: "https://rpc.example",
+    fetchImpl: (async (_u: unknown, init: RequestInit) => {
+      const req = JSON.parse(String(init.body));
+      seen.push(`${req.method}:${req.params[0]}`);
+      const data = replies[req.params[0]];
+      return new Response(JSON.stringify({ result: { value: data ? { data: [data.toString("base64"), "base64"] } : null } }));
+    }) as unknown as typeof fetch,
+  });
+  const candidate = { program: SPL_STAKE_POOL_PROGRAM, pool: "P", poolMint: "J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn", validatorList: "VL", withdrawAuthority: "W", totalLamports: null };
+
+  it("reads the validator list then, only for qualifying pools, the token name (two getAccountInfo calls)", async () => {
+    const seen: string[] = [];
+    const good = await measureCandidate(candidate, rpc({ VL: list([5000, 4000, 3000]), [META_PDA]: meta("Jito Staked SOL") }, seen));
+    expect(good).toEqual({ validators: 3, stakeLamports: 12_000n * SOL, mintName: "Jito Staked SOL" });
+    expect(seen).toEqual(["getAccountInfo:VL", `getAccountInfo:${META_PDA}`]);
+
+    seen.length = 0;
+    expect(await measureCandidate(candidate, rpc({ VL: list([900_000]) }, seen))).toBeNull(); // one validator: no second call
+    expect(seen).toEqual(["getAccountInfo:VL"]);
+    expect(await measureCandidate(candidate, rpc({}))).toBeNull(); // account gone
+  });
+
+  it("a missing token name does not block a qualifying pool, and RPC errors propagate", async () => {
+    expect(await measureCandidate(candidate, rpc({ VL: list([4000, 4000, 4000]) }))).toMatchObject({ validators: 3, mintName: null });
+    let calls = 0;
+    const failing = { rpcUrl: "https://x", retryDelayMs: 0, fetchImpl: (async () => (calls++, new Response("no", { status: 429 }))) as unknown as typeof fetch };
+    await expect(measureCandidate(candidate, failing)).rejects.toThrow("429");
+    expect(calls).toBe(3); // one try and two retries, then it gives up
+    const serverError = { rpcUrl: "https://x", retryDelayMs: 0, fetchImpl: (async () => (calls++, new Response("no", { status: 500 }))) as unknown as typeof fetch };
+    calls = 0;
+    await expect(measureCandidate(candidate, serverError)).rejects.toThrow("500");
+    expect(calls).toBe(1); // only rate limits are retried
+    // a rate limit that clears on the second try succeeds
+    let n = 0;
+    const flaky = { rpcUrl: "https://x", retryDelayMs: 0, fetchImpl: (async () => (n++ === 0 ? new Response("slow", { status: 429 }) : new Response(JSON.stringify({ result: { value: null } })))) as unknown as typeof fetch };
+    expect(await measureCandidate(candidate, flaky)).toBeNull();
   });
 });

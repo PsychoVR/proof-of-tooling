@@ -93,6 +93,12 @@ export const poolCandidates = mysqlTable(
     validatorList: varchar("validator_list", { length: 64 }).notNull(),
     withdrawAuthority: varchar("withdraw_authority", { length: 64 }).notNull(),
     program: varchar("program", { length: 64 }).notNull(),
+    /** Measured from the pool's validator list when it was found: validators with real stake, null before the first measurement. */
+    validatorsCount: int("validators_count"),
+    /** Active stake across all its validators, in lamports. */
+    totalStakeLamports: bigint("total_stake_lamports", { mode: "bigint", unsigned: true }),
+    /** Name of the pool's token as published in its metadata. Third-party text: sanitized, display only, never an identity. */
+    mintName: varchar("mint_name", { length: 80 }),
     firstSeen: timestamp("first_seen").defaultNow().notNull(),
     lastSeen: timestamp("last_seen").defaultNow().notNull(),
     status: mysqlEnum("status", POOL_CANDIDATE_STATUSES).notNull().default("pending"),

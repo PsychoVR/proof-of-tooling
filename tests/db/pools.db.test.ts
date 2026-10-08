@@ -1,6 +1,6 @@
-import { rmSync, writeFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { getDb } from "@/db";
 import { DEV_VALIDATORS as V, resetDevDb, seedDevData } from "@/db/dev-data";
@@ -66,7 +66,7 @@ beforeEach(async () => {
   await resetDevDb();
   await seedDevData();
   // The dev seed fills these tables for the UI; these tests start from empty ones.
-  for (const t of [validatorPoolStake, validatorPoolScan, validatorSfdp]) await getDb().delete(t);
+  for (const t of [validatorPoolStake, validatorPoolScan, validatorSfdp, poolCandidates]) await getDb().delete(t);
 });
 afterAll(async () => {
   rmSync(LOGO, { force: true });
@@ -191,21 +191,23 @@ describe("pools job against the database (simulated RPC)", () => {
     expect((await getPoolBadges([V.pumpkin.identity])).get(V.pumpkin.identity)!.sfdp).toEqual({ participant: true, checkedAt: old.toISOString() });
   });
 
-  it("discovery lists unknown pools as pending candidates, once, without touching decisions", async () => {
-    const mk = (pool: string, program: string) => ({ pool, program, poolMint: `mint-${pool.slice(0, 4)}`, validatorList: "VL", withdrawAuthority: splWithdrawAuthority(pool, program) });
+  it("discovery lists qualifying unknown pools as pending candidates, once, without touching decisions", async () => {
+    const mk = (pool: string, program: string) => ({ pool, program, poolMint: `mint-${pool.slice(0, 4)}`, validatorList: "VL", withdrawAuthority: splWithdrawAuthority(pool, program), totalLamports: 50_000n * 1_000_000_000n });
     const found: Record<string, ReturnType<typeof mk>[]> = {
       [SPL_STAKE_POOL_PROGRAM]: [mk("Jito4APyf642JPZPx3hGc6WWJ8zPKtRbRs4P815Awbb", SPL_STAKE_POOL_PROGRAM), mk("LW3qEdGWdVrxNgxSXW8vZri7Jifg4HuKEQ1UABLxs3C", SPL_STAKE_POOL_PROGRAM)],
       [SANCTUM_MULTI_PROGRAM]: [mk("8VpRhuxa7sUUepdY3kQiTmX9rS5vx4WgaXiAnXq4KCtr", SANCTUM_MULTI_PROGRAM)],
     };
-    const d = deps(rpcFetch(), { discover: async (program) => found[program] ?? [] });
+    const measure = async (c: { pool: string }) => ({ validators: 40, stakeLamports: 45_000n * 1_000_000_000n, mintName: `Name of ${c.pool.slice(0, 4)}` });
+    const d = deps(rpcFetch(), { discover: async (program) => found[program] ?? [], measure });
     const first = await runPools(d);
     // the registry pool (Jito) is not listed as a candidate
-    expect(first.discovery).toEqual({ programs: 3, found: 3, added: 2 });
+    expect(first.discovery).toEqual({ programs: 3, found: 2, measured: 2, qualified: 2, added: 2, dropped: 0, deferred: 0 });
     const rows = await getDb().select().from(poolCandidates);
     expect(rows.map((c) => c.pool).sort()).toEqual(["8VpRhuxa7sUUepdY3kQiTmX9rS5vx4WgaXiAnXq4KCtr", "LW3qEdGWdVrxNgxSXW8vZri7Jifg4HuKEQ1UABLxs3C"]);
     expect(rows.every((c) => c.status === "pending" && c.name === null && c.logoId === null)).toBe(true);
     const sample = rows[0];
     expect(sample.withdrawAuthority).toBe(splWithdrawAuthority(sample.pool, sample.program));
+    expect(sample).toMatchObject({ validatorsCount: 40, totalStakeLamports: 45_000n * 1_000_000_000n, mintName: `Name of ${sample.pool.slice(0, 4)}` });
 
     await getDb().update(poolCandidates).set({ status: "approved", name: "Kept", logoId: "jito" }).where(eq(poolCandidates.pool, sample.pool));
     await getDb().update(jobRuns).set({ lastRunAt: new Date(Date.now() - 8 * 24 * 3_600_000) });
@@ -216,6 +218,44 @@ describe("pools job against the database (simulated RPC)", () => {
     expect(await getDb().select().from(poolCandidates)).toHaveLength(2);
     // discovery is weekly: the run right after does not repeat it
     expect((await runPools(d)).discovery).toBeNull();
+  });
+
+  it("discovery drops pending pools that stop qualifying and never deletes approved or rejected ones", async () => {
+    const program = SPL_STAKE_POOL_PROGRAM;
+    const mk = (pool: string, totalSol: number) => ({ pool, program, poolMint: "M", validatorList: "VL", withdrawAuthority: "W", totalLamports: BigInt(totalSol) * 1_000_000_000n });
+    const pools = { stays: mk("Stays", 80_000), fails: mk("Fails", 80_000), tiny: mk("Tiny", 50), approved: mk("Approved", 60), rejected: mk("Rejected", 60), fresh: mk("Fresh", 70_000) };
+    const base = { poolMint: "M", validatorList: "VL", withdrawAuthority: "W", program };
+    await getDb().insert(poolCandidates).values([
+      { ...base, pool: "Stays" },
+      { ...base, pool: "Fails" },
+      { ...base, pool: "Tiny" },
+      { ...base, pool: "Approved", status: "approved", name: "Kept", logoId: "jito" },
+      { ...base, pool: "Rejected", status: "rejected" },
+    ]);
+    const measure = async (c: { pool: string }) => (c.pool === "Fails" ? null : { validators: 5, stakeLamports: 20_000n * 1_000_000_000n, mintName: null });
+    const r = await runPools(deps(rpcFetch(), { discover: async (p) => (p === program ? Object.values(pools) : []), measure }));
+    expect(r.discovery).toMatchObject({ found: 6, measured: 3, qualified: 2, added: 1, dropped: 2 });
+    const rows = await getDb().select().from(poolCandidates);
+    expect(rows.map((c) => `${c.pool}:${c.status}`).sort()).toEqual(["Approved:approved", "Fresh:pending", "Rejected:rejected", "Stays:pending"]);
+    expect(rows.find((c) => c.pool === "Approved")).toMatchObject({ name: "Kept", logoId: "jito", validatorsCount: null });
+  });
+
+  it("migration 0011 clears the unmeasured pending candidates, keeps decided ones and re-arms discovery", async () => {
+    const base = { poolMint: "M", validatorList: "VL", withdrawAuthority: "W", program: SPL_STAKE_POOL_PROGRAM };
+    await getDb().insert(poolCandidates).values([
+      { ...base, pool: "P1" },
+      { ...base, pool: "P2" },
+      { ...base, pool: "Ok", status: "approved", name: "Ok", logoId: "jito" },
+      { ...base, pool: "No", status: "rejected" },
+    ]);
+    await getDb().insert(jobRuns).values([{ name: "pool-discovery" }, { name: "sfdp" }]);
+    const file = readFileSync(path.join(process.cwd(), "drizzle", "0011_pool_candidate_metrics.sql"), "utf8");
+    const statements = file.split("--> statement-breakpoint").map((part) => part.split("\n").filter((l) => !l.trim().startsWith("--")).join("\n").trim());
+    const deletes = statements.filter((q) => q.startsWith("DELETE"));
+    expect(deletes).toHaveLength(2);
+    for (const q of deletes) await getDb().execute(sql.raw(q));
+    expect((await getDb().select().from(poolCandidates)).map((c) => c.pool).sort()).toEqual(["No", "Ok"]);
+    expect((await getDb().select().from(jobRuns)).map((j) => j.name)).toEqual(["sfdp"]);
   });
 
   it("discovery parses the recorded StakePool accounts of the SPL program", async () => {
@@ -234,8 +274,10 @@ describe("admin: stake pool candidates", () => {
   const JUP = "8VpRhuxa7sUUepdY3kQiTmX9rS5vx4WgaXiAnXq4KCtr";
   const seedCandidates = async () => {
     await getDb().insert(poolCandidates).values([
-      { pool: JUP, poolMint: "jupSoLaHXQiZZTSfEWMTRRgpnyFm8f6sZdosWBjx93v", validatorList: "VL1", withdrawAuthority: splWithdrawAuthority(JUP, SANCTUM_MULTI_PROGRAM), program: SANCTUM_MULTI_PROGRAM },
-      { pool: "LW3qEdGWdVrxNgxSXW8vZri7Jifg4HuKEQ1UABLxs3C", poolMint: "M2", validatorList: "VL2", withdrawAuthority: "W2", program: "SP12tWFxD9oJsVWNavTTBZvMbA6gkAmxtVgxdqvyvhY" },
+      { pool: JUP, poolMint: "jupSoLaHXQiZZTSfEWMTRRgpnyFm8f6sZdosWBjx93v", validatorList: "VL1", withdrawAuthority: splWithdrawAuthority(JUP, SANCTUM_MULTI_PROGRAM), program: SANCTUM_MULTI_PROGRAM, validatorsCount: 200, totalStakeLamports: 900_000n * 1_000_000_000n, mintName: "Jupiter Staked SOL" },
+      { pool: "LW3qEdGWdVrxNgxSXW8vZri7Jifg4HuKEQ1UABLxs3C", poolMint: "M2", validatorList: "VL2", withdrawAuthority: "W2", program: "SP12tWFxD9oJsVWNavTTBZvMbA6gkAmxtVgxdqvyvhY", validatorsCount: 30, totalStakeLamports: 40_000n * 1_000_000_000n, mintName: "Lantern SOL" },
+      // measured before this field existed
+      { pool: "OldOneNeverMeasured1111111111111111111111111", poolMint: "M3", validatorList: "VL3", withdrawAuthority: "W3", program: "SP12tWFxD9oJsVWNavTTBZvMbA6gkAmxtVgxdqvyvhY" },
     ]);
   };
 
@@ -251,9 +293,14 @@ describe("admin: stake pool candidates", () => {
   it("lists by status with pagination and validates its parameters", async () => {
     await seedCandidates();
     const page = await (await handleListCandidates(req("/api/admin/pools/candidates?limit=1"))).json();
-    expect(page).toMatchObject({ total: 2, limit: 1, offset: 0 });
+    expect(page).toMatchObject({ total: 3, limit: 1, offset: 0 });
     expect(page.items).toHaveLength(1);
-    expect(page.items[0]).toMatchObject({ status: "pending", name: null });
+    expect(page.items[0]).toMatchObject({ pool: JUP, status: "pending", name: null, mintName: "Jupiter Staked SOL", validators: 200, totalStakeSol: 900_000 });
+    expect(page.items[0]).not.toHaveProperty("totalStakeLamports");
+    // largest total stake first; rows that were never measured go last
+    const all = await (await handleListCandidates(req("/api/admin/pools/candidates"))).json();
+    expect(all.items.map((c: { mintName: string | null }) => c.mintName)).toEqual(["Jupiter Staked SOL", "Lantern SOL", null]);
+    expect(all.items[2]).toMatchObject({ validators: null, totalStakeSol: null });
     expect((await (await handleListCandidates(req("/api/admin/pools/candidates?status=approved"))).json()).items).toEqual([]);
     expect((await (await handleListCandidates(req("/api/admin/pools/candidates?limit=9999"))).json()).limit).toBe(100);
     for (const bad of ["status=nope", "limit=abc", "offset=-1", "limit="]) {

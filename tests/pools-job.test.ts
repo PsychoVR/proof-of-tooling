@@ -13,6 +13,7 @@ import {
   type PoolsDeps,
   type PoolTarget,
 } from "@/jobs/pools";
+import { MAX_MEASURED_PER_RUN, type PoolCandidate } from "@/lib/solana/pool-discovery";
 import { approvedToPools, logoPathFor, LOGO_ID_RE, poolMetaMap } from "@/lib/pool-registry";
 import { buildAuthorityIndex } from "@/lib/solana/stake-pools";
 
@@ -109,7 +110,8 @@ function makeDeps(over: Partial<PoolsDeps> = {}, t: PoolTarget[] = targets(3)) {
     lastRun: async (n) => runs.get(n) ?? null,
     markRun: async (n) => void runs.set(n, NOW),
     discover: async () => [],
-    saveCandidates: async (l) => l.length,
+    measure: async () => null,
+    saveCandidates: async (l) => ({ added: l.length, dropped: 0 }),
     fetchSfdp: async (ids) => new Set([ids[0]]),
     saveSfdp: async () => {},
     remove: async () => 0,
@@ -118,18 +120,27 @@ function makeDeps(over: Partial<PoolsDeps> = {}, t: PoolTarget[] = targets(3)) {
   return { deps, saved, runs };
 }
 
+const SOL = 1_000_000_000n;
+const cand = (pool: string, program = "SPoo1Ku8WFXoNDMHPsrGSTSG1Y47rzgn41SLUNakuHy", totalSol: number | null = 20_000): PoolCandidate => ({
+  program,
+  pool,
+  poolMint: "m",
+  validatorList: "v",
+  withdrawAuthority: "w",
+  totalLamports: totalSol === null ? null : BigInt(totalSol) * SOL,
+});
+const QUALIFIES = { validators: 12, stakeLamports: 15_000n * SOL, mintName: "Some SOL" };
+
 describe("runPools", () => {
   it("scans due validators, records them, and runs discovery and SFDP when due", async () => {
-    const discover = vi.fn(async (program: string) => [
-      { program, pool: `p-${program.slice(0, 4)}`, poolMint: "m", validatorList: "v", withdrawAuthority: "w" },
-    ]);
+    const discover = vi.fn(async (program: string) => [cand(`p-${program.slice(0, 4)}`)]);
     const saveSfdp = vi.fn(async () => {});
-    const { deps, saved } = makeDeps({ discover, saveSfdp });
+    const { deps, saved } = makeDeps({ discover, saveSfdp, measure: async () => QUALIFIES });
     const r = await runPools(deps);
     expect(r).toMatchObject({ mode: "daily", verified: 3, due: 3, scanned: 3, failed: 0, withPools: 3, deferred: 0, epochError: false });
     expect(saved.map((s) => s.epoch)).toEqual([1052, 1052, 1052]);
     expect(discover).toHaveBeenCalledTimes(3);
-    expect(r.discovery).toEqual({ programs: 3, found: 3, added: 3 });
+    expect(r.discovery).toEqual({ programs: 3, found: 3, measured: 3, qualified: 3, added: 3, dropped: 0, deferred: 0 });
     expect(r.sfdp).toEqual({ participants: 1, ok: true });
     expect(saveSfdp).toHaveBeenCalledWith(expect.any(Array), expect.any(Set));
   });
@@ -211,15 +222,16 @@ describe("runPools", () => {
   });
 
   it("discovery errors on one program keep the others; all failing keeps the schedule open", async () => {
-    const saveCandidates = vi.fn(async (l: unknown[]) => l.length);
+    const saveCandidates = vi.fn(async (l: unknown[]) => ({ added: l.length, dropped: 0 }));
     const { deps } = makeDeps({
       discover: async (program) => {
         if (program.startsWith("SP12")) throw new Error("boom");
-        return [{ program, pool: "p", poolMint: "m", validatorList: "v", withdrawAuthority: "w" }];
+        return [cand(`p-${program.slice(0, 4)}`, program)];
       },
+      measure: async () => QUALIFIES,
       saveCandidates,
     });
-    expect((await runPools(deps)).discovery).toEqual({ programs: 2, found: 2, added: 2 });
+    expect((await runPools(deps)).discovery).toMatchObject({ programs: 2, found: 2, added: 2 });
     const bad = makeDeps({
       discover: async () => {
         throw new Error("x");
@@ -227,8 +239,67 @@ describe("runPools", () => {
       saveCandidates,
     });
     const r = await runPools(bad.deps);
-    expect(r.discovery).toEqual({ programs: 0, found: 0, added: 0 });
+    expect(r.discovery).toMatchObject({ programs: 0, found: 0, added: 0, dropped: 0 });
     expect(bad.runs.has("pool-discovery")).toBe(false);
+  });
+
+  describe("candidate selection", () => {
+    const spl = "SPoo1Ku8WFXoNDMHPsrGSTSG1Y47rzgn41SLUNakuHy";
+    const only = (list: PoolCandidate[]) => async (program: string) => (program === spl ? list : []);
+
+    it("skips the RPC for pools under 10,000 SOL, drops them, and measures the rest largest first", async () => {
+      const order: string[] = [];
+      const saveCandidates = vi.fn(async (_l: unknown[], _d: string[]) => ({ added: 1, dropped: 2 }));
+      const { deps, runs } = makeDeps({
+        discover: only([cand("small", spl, 9_999), cand("mid", spl, 12_000), cand("big", spl, 400_000), cand("unknown", spl, null)]),
+        measure: async (c) => {
+          order.push(c.pool);
+          return c.pool === "mid" ? null : QUALIFIES;
+        },
+        saveCandidates,
+      });
+      const r = await runPools(deps);
+      expect(order).toEqual(["big", "mid", "unknown"]);
+      const [list, drop] = saveCandidates.mock.calls[0];
+      expect((list as { pool: string }[]).map((c) => c.pool).sort()).toEqual(["big", "unknown"]);
+      expect(drop.sort()).toEqual(["mid", "small"]);
+      expect(r.discovery).toEqual({ programs: 3, found: 4, measured: 3, qualified: 2, added: 1, dropped: 2, deferred: 0 });
+      expect(runs.has("pool-discovery")).toBe(true);
+    });
+
+    it("never measures or lists pools of the static registry", async () => {
+      const measure = vi.fn(async () => QUALIFIES);
+      const jito = "Jito4APyf642JPZPx3hGc6WWJ8zPKtRbRs4P815Awbb";
+      const { deps } = makeDeps({ discover: only([cand(jito, spl, 5_000_000), cand("other")]), measure });
+      const r = await runPools(deps);
+      expect(measure).toHaveBeenCalledTimes(1);
+      expect(r.discovery).toMatchObject({ found: 1, qualified: 1 });
+    });
+
+    it("a failed measurement keeps that pool as it is (no drop) and repeats discovery on the next run", async () => {
+      const saveCandidates = vi.fn(async (_l: unknown[], _d: string[]) => ({ added: 0, dropped: 0 }));
+      const { deps, runs } = makeDeps({
+        discover: only([cand("a"), cand("b")]),
+        measure: async (c) => {
+          if (c.pool === "a") throw new Error("rate limited");
+          return null;
+        },
+        saveCandidates,
+      });
+      const r = await runPools(deps);
+      expect(saveCandidates.mock.calls[0][1]).toEqual(["b"]);
+      expect(r.discovery).toMatchObject({ measured: 1, deferred: 1 });
+      expect(runs.has("pool-discovery")).toBe(false);
+    });
+
+    it("measures at most MAX_MEASURED_PER_RUN pools per run and reports the rest as deferred", async () => {
+      const list = Array.from({ length: MAX_MEASURED_PER_RUN + 5 }, (_, i) => cand(`p${i}`, spl, 20_000 + i));
+      const measure = vi.fn(async () => null);
+      const { deps } = makeDeps({ discover: only(list), measure });
+      const r = await runPools(deps);
+      expect(measure).toHaveBeenCalledTimes(MAX_MEASURED_PER_RUN);
+      expect(r.discovery).toMatchObject({ measured: MAX_MEASURED_PER_RUN, deferred: 5 });
+    });
   });
 
   it("when the SFDP list cannot be read the previous value is kept and the failure is reported", async () => {

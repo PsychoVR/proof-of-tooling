@@ -5,7 +5,14 @@ import { claims, jobRuns, poolCandidates, validatorPoolScan, validatorPoolStake,
 import { clusterRpcUrl, ENABLED_CLUSTERS } from "@/lib/clusters";
 import { loadApprovedPools } from "@/lib/pool-registry";
 import { createSafeFetcher } from "@/lib/safe-fetch";
-import { discoverStakePools, type PoolCandidate } from "@/lib/solana/pool-discovery";
+import {
+  discoverStakePools,
+  MAX_MEASURED_PER_RUN,
+  mayQualify,
+  measureCandidate,
+  type CandidateMeasure,
+  type PoolCandidate,
+} from "@/lib/solana/pool-discovery";
 import { fetchEpoch, fetchValidatorPools, type PoolRpcOptions, type PoolStake } from "@/lib/solana/pool-stake";
 import { fetchSfdpApproved, SFDP_MAX_BYTES } from "@/lib/solana/sfdp";
 import {
@@ -85,14 +92,21 @@ export interface PoolsDeps {
   lastRun: (name: string) => Promise<Date | null>;
   markRun: (name: string) => Promise<void>;
   discover: (program: string) => Promise<PoolCandidate[]>;
-  /** Upserts candidates without touching status, name or logo. Returns how many were new. */
-  saveCandidates: (list: PoolCandidate[]) => Promise<number>;
+  /** Reads one pool's validator list (and token name if it qualifies). Null if it does not qualify; throws on RPC errors. */
+  measure: (c: PoolCandidate) => Promise<CandidateMeasure | null>;
+  /**
+   * Upserts qualifying candidates with their metrics, without touching status, name or logo, and deletes the `drop`
+   * ones that are still pending (approved and rejected rows are never deleted). Returns how many were new and dropped.
+   */
+  saveCandidates: (list: MeasuredCandidate[], drop: string[]) => Promise<{ added: number; dropped: number }>;
   /** Approved SFDP identities among the given ones, or null if the list could not be read. */
   fetchSfdp: (identities: string[]) => Promise<Set<string> | null>;
   saveSfdp: (identities: string[], approved: Set<string> | null) => Promise<void>;
   /** Drops everything stored for identities that are no longer verified. Returns how many rows went. */
   remove: (keep: string[]) => Promise<number>;
 }
+
+export type MeasuredCandidate = PoolCandidate & CandidateMeasure;
 
 export interface PoolsReport {
   mode: PoolsMode;
@@ -107,7 +121,20 @@ export interface PoolsReport {
   withPools: number;
   removed: number;
   epochError: boolean;
-  discovery: { programs: number; found: number; added: number } | null;
+  discovery: {
+    programs: number;
+    /** Pools seen on chain, minus the ones of the static registry. */
+    found: number;
+    /** Pools whose validator list was read. */
+    measured: number;
+    /** Qualifying pools (>= 3 validators and >= 10,000 SOL active). */
+    qualified: number;
+    added: number;
+    /** Pending rows deleted because the pool no longer qualifies. */
+    dropped: number;
+    /** Over the per-run cap, or measuring failed or ran out of time: tried again on the next run. */
+    deferred: number;
+  } | null;
   sfdp: { participants: number; ok: boolean } | null;
 }
 
@@ -116,6 +143,9 @@ export interface RunOptions {
   only?: string;
   budgetMs?: number;
 }
+
+/** Measuring candidates may run this long past the scan budget (the endpoint allows 300 s). */
+const MEASURE_EXTRA_MS = 30_000;
 
 const SFDP_RUN = "sfdp";
 const DISCOVERY_RUN = "pool-discovery";
@@ -133,6 +163,9 @@ const emptyReport = (mode: PoolsMode, verified: number): PoolsReport => ({
   discovery: null,
   sfdp: null,
 });
+
+const registryPoolAddresses = () =>
+  new Set(STAKE_POOLS.flatMap((p) => p.authorities.flatMap((a) => (a.kind === "spl-pool" ? [a.pool] : []))));
 
 const isDue = async (deps: PoolsDeps, name: string, every: number) => {
   const last = await deps.lastRun(name);
@@ -195,19 +228,49 @@ export async function runPools(deps: PoolsDeps = defaultPoolsDeps, opts: RunOpti
   if (opts.only) return report;
 
   if (await isDue(deps, DISCOVERY_RUN, DISCOVERY_EVERY_MS)) {
-    const found: PoolCandidate[] = [];
+    const seen: PoolCandidate[] = [];
     let okPrograms = 0;
     for (const program of DISCOVERY_PROGRAMS) {
       try {
-        found.push(...(await deps.discover(program)));
+        seen.push(...(await deps.discover(program)));
         okPrograms++;
       } catch {
         // The next weekly run tries again; candidates already stored stay.
       }
     }
-    const added = okPrograms > 0 ? await deps.saveCandidates(found) : 0;
-    if (okPrograms > 0) await deps.markRun(DISCOVERY_RUN);
-    report.discovery = { programs: okPrograms, found: found.length, added };
+    // Pools of the static registry are already known; listing them as candidates would only add noise.
+    const known = registryPoolAddresses();
+    const found = seen.filter((c) => !known.has(c.pool));
+    // Pools below 10,000 SOL in total (read for free from the StakePool prefix) cannot qualify: no RPC call for them.
+    const drop = found.filter((c) => !mayQualify(c)).map((c) => c.pool);
+    const worth = found
+      .filter(mayQualify)
+      .sort((a, b) => (a.totalLamports === b.totalLamports ? 0 : (a.totalLamports ?? 0n) > (b.totalLamports ?? 0n) ? -1 : 1));
+    const batch = worth.slice(0, MAX_MEASURED_PER_RUN);
+    const qualified: MeasuredCandidate[] = [];
+    let measured = 0;
+    let failedMeasures = 0;
+    let nextPool = 0;
+    const measureWorker = async () => {
+      while (nextPool < batch.length) {
+        if (Date.now() - started > budgetMs + MEASURE_EXTRA_MS) return;
+        const c = batch[nextPool++];
+        try {
+          const m = await deps.measure(c);
+          measured++;
+          if (m) qualified.push({ ...c, ...m });
+          else drop.push(c.pool);
+        } catch {
+          failedMeasures++; // keep whatever is stored for this pool and retry on the next run
+        }
+      }
+    };
+    if (okPrograms > 0) await Promise.all(Array.from({ length: Math.min(POOL, batch.length) }, measureWorker));
+    const saved = okPrograms > 0 ? await deps.saveCandidates(qualified, drop) : { added: 0, dropped: 0 };
+    const deferred = failedMeasures + Math.max(0, batch.length - nextPool) + (worth.length - batch.length);
+    // A run that could not finish measuring is repeated tomorrow instead of next week.
+    if (okPrograms > 0 && failedMeasures === 0 && nextPool >= batch.length) await deps.markRun(DISCOVERY_RUN);
+    report.discovery = { programs: okPrograms, found: found.length, measured, qualified: qualified.length, ...saved, deferred };
   }
 
   if (all.length > 0 && (await isDue(deps, SFDP_RUN, SFDP_EVERY_MS))) {
@@ -303,17 +366,33 @@ export const defaultPoolsDeps: PoolsDeps = {
     await db().insert(jobRuns).values({ name }).onDuplicateKeyUpdate({ set: { lastRunAt: sql`CURRENT_TIMESTAMP` } });
   },
   discover: (program) => discoverStakePools(program, rpcOptions()),
-  async saveCandidates(list) {
-    // Pools of the static registry are already known; listing them as candidates would only add noise.
-    const known = new Set(STAKE_POOLS.flatMap((p) => p.authorities.flatMap((a) => (a.kind === "spl-pool" ? [a.pool] : []))));
-    const fresh = list.filter((c) => !known.has(c.pool));
-    const [before] = await db().select({ n: count() }).from(poolCandidates);
-    for (const part of chunks(fresh, 400)) {
+  measure: (c) => measureCandidate(c, rpcOptions()),
+  async saveCandidates(list, drop) {
+    let existing = 0;
+    for (const part of chunks(list.map((c) => c.pool), 400)) {
+      const [r] = await db().select({ n: count() }).from(poolCandidates).where(inArray(poolCandidates.pool, part));
+      existing += Number(r.n);
+    }
+    for (const part of chunks(list, 400)) {
       await db()
         .insert(poolCandidates)
-        .values(part.map((c) => ({ pool: c.pool, poolMint: c.poolMint, validatorList: c.validatorList, withdrawAuthority: c.withdrawAuthority, program: c.program })))
+        .values(
+          part.map((c) => ({
+            pool: c.pool,
+            poolMint: c.poolMint,
+            validatorList: c.validatorList,
+            withdrawAuthority: c.withdrawAuthority,
+            program: c.program,
+            validatorsCount: c.validators,
+            totalStakeLamports: c.stakeLamports,
+            mintName: c.mintName,
+          })),
+        )
         .onDuplicateKeyUpdate({
           set: {
+            validatorsCount: sql`values(${poolCandidates.validatorsCount})`,
+            totalStakeLamports: sql`values(${poolCandidates.totalStakeLamports})`,
+            mintName: sql`values(${poolCandidates.mintName})`,
             poolMint: sql`values(${poolCandidates.poolMint})`,
             validatorList: sql`values(${poolCandidates.validatorList})`,
             withdrawAuthority: sql`values(${poolCandidates.withdrawAuthority})`,
@@ -322,8 +401,12 @@ export const defaultPoolsDeps: PoolsDeps = {
           },
         });
     }
-    const [after] = await db().select({ n: count() }).from(poolCandidates);
-    return Number(after.n) - Number(before.n);
+    let dropped = 0;
+    for (const part of chunks(drop, 400)) {
+      const [res] = await db().delete(poolCandidates).where(and(eq(poolCandidates.status, "pending"), inArray(poolCandidates.pool, part)));
+      dropped += res.affectedRows;
+    }
+    return { added: list.length - existing, dropped };
   },
   async fetchSfdp(identities) {
     sfdpFetcher ??= createSafeFetcher({ maxBytes: SFDP_MAX_BYTES, timeoutMs: 30_000 });

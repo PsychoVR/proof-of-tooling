@@ -1,7 +1,7 @@
 // Local development and test data: example validators and claims. Never run against production.
 import { eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { claims, endorsements, seedEntries, tools, validatorIcons, validatorPoolScan, validatorPoolStake, validatorSfdp, validators } from "@/db/schema";
+import { claims, endorsements, seedEntries, tools, validatorIcons, poolCandidates, validatorPoolScan, validatorPoolStake, validatorSfdp, validators } from "@/db/schema";
 import { iconEtag } from "@/lib/validator-icons";
 import { SEED_ADDED_BY, SEED_TOOLS as ALL_SEED_TOOLS } from "./seed-data";
 
@@ -93,6 +93,12 @@ export async function seedDevData(db: Db = getDb()) {
   await db.insert(validatorPoolScan).values([
     { identity: DEV_VALIDATORS.pumpkin.identity, epoch: 1052 },
     { identity: DEV_VALIDATORS.overclock.identity, epoch: 1052 },
+  ]);
+  // Pending stake pool candidates, as the weekly discovery lists them (measured; the admin list sorts by total stake).
+  const pool = { withdrawAuthority: "DevWithdrawAuthority", program: "SPoo1Ku8WFXoNDMHPsrGSTSG1Y47rzgn41SLUNakuHy" };
+  await db.insert(poolCandidates).values([
+    { ...pool, pool: "DevPoolSmall", poolMint: "DevMintSmall", validatorList: "DevListSmall", validatorsCount: 12, totalStakeLamports: sol(15_000), mintName: "Dev Small Staked SOL" },
+    { ...pool, pool: "DevPoolLarge", poolMint: "DevMintLarge", validatorList: "DevListLarge", validatorsCount: 150, totalStakeLamports: sol(2_400_000), mintName: "Dev Large Staked SOL" },
   ]);
   const checked = new Date("2026-10-07T04:00:00Z");
   await db.insert(validatorSfdp).values([

@@ -89,6 +89,21 @@ export interface PoolRpcOptions {
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
   maxBytes?: number;
+  /** Base wait before retrying a rate-limited (HTTP 429) call in `retryOnRateLimit`; defaults to 1,000 ms. */
+  retryDelayMs?: number;
+}
+
+/** Runs `call`, retrying up to twice with growing waits when the RPC answers HTTP 429 (public endpoints do under bursts). */
+export async function retryOnRateLimit<T>(call: () => Promise<T>, o: Pick<PoolRpcOptions, "retryDelayMs">): Promise<T> {
+  const base = o.retryDelayMs ?? 1000;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await call();
+    } catch (err) {
+      if (attempt >= 2 || !(err instanceof Error) || !err.message.endsWith("HTTP 429")) throw err;
+      await new Promise((resolve) => setTimeout(resolve, base * (attempt + 1)));
+    }
+  }
 }
 
 async function readCapped(res: Response, maxBytes: number): Promise<string> {

@@ -36,7 +36,11 @@ test("stake pool candidate endpoints are admin only and validate their input", a
     expect((await request.post(`/api/admin/pools/candidates/${"9".repeat(44)}/approve`, { headers, data: { name: "X", logoId: "jito" } })).status()).toBe(401);
     expect((await request.post(`/api/admin/pools/candidates/${"9".repeat(44)}/reject`, { headers })).status()).toBe(401);
   }
-  expect(await (await request.get("/api/admin/pools/candidates", { headers: auth })).json()).toMatchObject({ items: [], total: 0, limit: 50, offset: 0 });
+  // dev data lists two measured candidates; the largest total stake comes first
+  const list = await (await request.get("/api/admin/pools/candidates", { headers: auth })).json();
+  expect(list).toMatchObject({ total: 2, limit: 50, offset: 0 });
+  expect(list.items.map((c: { pool: string }) => c.pool)).toEqual(["DevPoolLarge", "DevPoolSmall"]);
+  expect(list.items[0]).toMatchObject({ mintName: "Dev Large Staked SOL", validators: 150, totalStakeSol: 2_400_000, status: "pending" });
   expect((await request.get("/api/admin/pools/candidates?status=nope", { headers: auth })).status()).toBe(400);
   const missing = `/api/admin/pools/candidates/${"9".repeat(44)}`;
   expect((await request.post(`${missing}/approve`, { headers: auth, data: { name: "X", logoId: "jito" } })).status()).toBe(404);

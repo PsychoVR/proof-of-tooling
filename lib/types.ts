@@ -193,6 +193,8 @@ export interface ClaimResponse {
   ok: boolean;
   inReview?: boolean;
   claim?: Claim;
+  /** Slug of the claimed tool, so a client can link to its page after registering. */
+  toolSlug?: string;
   checks: ClaimCheckResult[];
 }
 

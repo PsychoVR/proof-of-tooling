@@ -54,7 +54,19 @@ test("wizard: valid CLI signature verifies and registers end to end", async ({ p
   await expect(page.getByText(/simulated/i)).toHaveCount(0);
 
   await page.getByRole("button", { name: "Register claim" }).click();
-  await expect(page.getByText("Claim registered.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Claim registered" })).toBeVisible();
+
+  // The success screen links to the tool page and the profile, and offers a prefilled post on X.
+  await expect(page.getByRole("link", { name: "View the tool page" })).toHaveAttribute("href", "/t/github-com-psychovr-proof-of-tooling");
+  await expect(page.getByRole("link", { name: "View your validator profile" })).toHaveAttribute("href", `/v/${fixture.identity}`);
+  const share = new URL((await page.getByRole("link", { name: "Share on X" }).getAttribute("href"))!);
+  expect(share.origin + share.pathname).toBe("https://x.com/intent/post");
+  const post = share.searchParams.get("text")!;
+  expect(post).toContain("@proofoftooling");
+  expect(post).toContain("https://tooling.sunshinevr.io/t/github-com-psychovr-proof-of-tooling");
+  expect(post).toContain("Proof of Tooling");
+  await page.getByRole("link", { name: "View the tool page" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Proof of Tooling" })).toBeVisible();
 
   // The claim appears in the profile, the leaderboard, the odometer and the registry.
   await page.goto(`/v/${fixture.identity}`);

@@ -8,6 +8,7 @@ import { sanitizeText } from "@/lib/text";
 import { getClientIp } from "@/lib/client-ip";
 import { failureReason, INTERNAL_REASON } from "@/lib/claim-failures";
 import { enforceIpLimits, logWouldBlock } from "@/lib/ip-limit-mode";
+import { getToolSlugById } from "@/lib/queries";
 import { parseClaimMessage, verifyClaimSignature } from "@/lib/claims";
 
 const bodySchema = z.object({
@@ -85,6 +86,11 @@ export async function handleClaimRequest(req: Request, persist: boolean) {
   }
   const reason = failureReason(result);
   if (reason) await deps.recordFailure?.(kind, reason);
+  if (persist && result.ok && result.claim) {
+    // Best effort: the claim is already stored, the slug only lets the client link to the tool page.
+    const toolSlug = await getToolSlugById(result.claim.toolId).catch(() => null);
+    if (toolSlug) result = { ...result, toolSlug };
+  }
   // A dry run reports failed steps in the body; only a real registration attempt is an HTTP error.
   return NextResponse.json(result, { status: result.ok || !persist ? 200 : 422 });
 }

@@ -143,6 +143,11 @@ export async function getToolBySlug(slug: string): Promise<ToolWithClaims | null
   return (await withClaims(rows))[0] ?? null;
 }
 
+export async function getToolSlugById(id: number): Promise<string | null> {
+  const rows = await getDb().select({ slug: tools.slug }).from(tools).where(eq(tools.id, id)).limit(1);
+  return rows[0]?.slug ?? null;
+}
+
 /** Full public registry: every active or stale claim with its message and signature. */
 export async function getRegistry(): Promise<RegistryResponse> {
   const rows = await getDb()

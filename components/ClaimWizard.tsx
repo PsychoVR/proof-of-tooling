@@ -11,10 +11,13 @@ import {
   proofTarget,
   checkClaim,
   registerClaim,
+  shareOnXUrl,
   signCommand,
+  toolPageUrl,
   validateIdentity,
   validateToolUrl,
 } from "@/lib/ui/claim";
+import Link from "next/link";
 import { CodeBlock } from "./CodeBlock";
 import { WebProofTabs } from "./WebProofTabs";
 
@@ -178,7 +181,16 @@ export function ClaimWizard() {
         </div>
       )}
 
-      {step === 2 && (
+      {step === 2 && registered && registered.ok && (
+        <ClaimSuccess
+          toolName={toolName.trim()}
+          identity={identity.trim()}
+          slug={registered.toolSlug}
+          inReview={!!registered.inReview}
+        />
+      )}
+
+      {step === 2 && !(registered && registered.ok) && (
         <div className="panel step">
           <div className="step-h">
             <span className="num" aria-hidden="true">3</span>
@@ -220,11 +232,6 @@ export function ClaimWizard() {
                     </button>
                   </div>
                 )}
-                {registered && registered.ok && (
-                  <strong className="ok">
-                    {registered.inReview ? "Claim submitted. It is in review and will count once approved." : "Claim registered."}
-                  </strong>
-                )}
                 {registered === null && <strong className="bad">Could not reach the service. Try again.</strong>}
                 {registered && !registered.ok && <strong className="bad">The claim was not recorded.</strong>}
                 {outcome.simulated && (
@@ -238,6 +245,34 @@ export function ClaimWizard() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function ClaimSuccess({ toolName, identity, slug, inReview }: { toolName: string; identity: string; slug?: string; inReview: boolean }) {
+  return (
+    <div className="panel step" role="status">
+      <div className="step-h">
+        <span className="num" aria-hidden="true">✓</span>
+        <h2>{inReview ? "Claim submitted" : "Claim registered"}</h2>
+      </div>
+      <p className="lede">
+        {inReview
+          ? `Your signature for ${toolName} checks out. The claim needs a manual review and will count once it is approved.`
+          : `${toolName} is now signed by your validator identity and counts in the ledger. Anyone can re-verify the signature in the public registry.`}
+      </p>
+      <div className="btns">
+        {slug && !inReview && (
+          <Link className="btn primary" href={`/t/${slug}`}>View the tool page</Link>
+        )}
+        <Link className={slug && !inReview ? "btn" : "btn primary"} href={`/v/${encodeURIComponent(identity)}`}>View your validator profile</Link>
+        {slug && !inReview && (
+          <a className="btn" href={shareOnXUrl(toolName, toolPageUrl(slug))} target="_blank" rel="noopener noreferrer">Share on X</a>
+        )}
+      </div>
+      <p className="note">
+        Built another tool? <a className="linkplain" href="/claim">Claim it too</a>.
+      </p>
     </div>
   );
 }

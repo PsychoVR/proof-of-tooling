@@ -1,5 +1,6 @@
 // Claim wizard helpers: message building, input validation and the check client.
 import { normalizeToolUrl } from "@/lib/claims/message";
+import { SITE_URL, TWITTER_HANDLE } from "@/lib/seo";
 import type { ClaimCheckResponse, ClaimCheckResult, ClaimRequest, ClaimResponse } from "@/lib/types";
 
 const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -195,3 +196,12 @@ export const CHECK_LABELS: Record<ClaimCheckResult["id"], string> = {
   repo: "Repo is public and original",
   rules: "Passes the anti-abuse rules",
 };
+
+/** X intent link with a ready-made post that mentions the account and links to the tool page. */
+export function shareOnXUrl(toolName: string, pageUrl: string): string {
+  const text = `I just claimed ${toolName} on Proof of Tooling, a verified directory of tools built by Solana validators.\n\n${pageUrl}\n\n${TWITTER_HANDLE}`;
+  return `https://x.com/intent/post?${new URLSearchParams({ text }).toString().replace(/\+/g, "%20")}`;
+}
+
+/** Public URL of a tool page on the site. */
+export const toolPageUrl = (slug: string) => `${SITE_URL}/t/${slug}`;

@@ -12,6 +12,7 @@ import {
   serializeWizardState,
   buildClaimMessage,
   type ClaimPrefill,
+  normalizeToolUrl,
   githubNewFileUrl,
   proofHint,
   proofJson,
@@ -35,6 +36,8 @@ const STEPS = ["Describe the tool", "Sign the claim", "Verify and register"];
 
 export interface ListedTool {
   slug: string;
+  /** Canonical url of the listed tool. */
+  url: string;
   /** True when the tool already has an active claim. */
   claimed: boolean;
   creditedTo: string | null;
@@ -57,6 +60,8 @@ export function ClaimWizard({ initial, listed }: { initial?: ClaimPrefill; liste
   const [notice, setNotice] = useState<string | null>(null);
   const [restored, setRestored] = useState(false);
 
+  // While the url is the listed tool's, its stored name and category are the ones that count.
+  const locked = !!listed && normalizeToolUrl(url) === listed.url;
   const urlErr = validateToolUrl(url);
   const idErr = validateIdentity(identity);
   const message = buildClaimMessage(url, identity, date);
@@ -176,17 +181,18 @@ export function ClaimWizard({ initial, listed }: { initial?: ClaimPrefill; liste
                   This tool is already listed, unclaimed{listed.creditedTo ? `, credited to ${listed.creditedTo}` : ""}.
                 </>
               )}
+              {locked ? " Its name and category come from the directory and cannot be changed here." : ""}
             </p>
           )}
           <div className="row2">
             <div className="field">
               <label htmlFor="c-name">Tool name</label>
-              <input id="c-name" value={toolName} maxLength={80} onChange={(e) => setToolName(e.target.value)} placeholder="e.g. My validator dashboard" aria-invalid={touched && !toolName.trim()} />
+              <input id="c-name" value={toolName} readOnly={locked} maxLength={80} onChange={(e) => setToolName(e.target.value)} placeholder="e.g. My validator dashboard" aria-invalid={touched && !toolName.trim()} />
               {touched && !toolName.trim() && <span className="err">Enter the tool name.</span>}
             </div>
             <div className="field">
               <label htmlFor="c-cat">Category</label>
-              <select id="c-cat" value={category} onChange={(e) => setCategory(e.target.value as Category | "")} aria-invalid={touched && !category} aria-describedby="c-cat-e">
+              <select id="c-cat" value={category} disabled={locked} onChange={(e) => setCategory(e.target.value as Category | "")} aria-invalid={touched && !category} aria-describedby="c-cat-e">
                 <option value="">Choose a category…</option>
                 {CATEGORIES.map((c) => (
                   <option key={c}>{c}</option>
@@ -195,6 +201,11 @@ export function ClaimWizard({ initial, listed }: { initial?: ClaimPrefill; liste
               {touched && !category && <span id="c-cat-e" className="err">Choose a category.</span>}
             </div>
           </div>
+          {!locked && (
+            <p className="note" style={{ marginTop: -4 }}>
+              Name and category are used when the tool is new. If the URL is already in the directory, its entry keeps its own.
+            </p>
+          )}
           <div className="field">
             <label htmlFor="c-url">Repo or site URL</label>
             <input id="c-url" className="mono-in" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="github.com/you/your-tool" aria-invalid={touched && !!urlErr} aria-describedby="c-url-e" autoComplete="off" />

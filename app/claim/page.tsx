@@ -28,7 +28,7 @@ export default async function ClaimPage({ searchParams }: { searchParams: Promis
       </p>
       <ClaimWizard
         initial={initial}
-        listed={listed ? { slug: listed.slug, claimed: listed.status === "claimed", creditedTo: listed.owner?.name ?? null } : undefined}
+        listed={listed ? { slug: listed.slug, url: listed.url, claimed: listed.status === "claimed", creditedTo: listed.owner?.name ?? null } : undefined}
       />
     </>
   );

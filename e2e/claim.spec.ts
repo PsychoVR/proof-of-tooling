@@ -227,6 +227,14 @@ test.describe("claim links", () => {
     await expect(page.getByText("This tool is already listed, unclaimed, credited to Valid Blocks.")).toBeVisible();
     await expect(page.locator("#c-name")).toHaveValue("Alpenglow Explorer");
     await expect(page.locator("#c-cat")).toHaveValue("Explorer");
+    // Name and category of a listed tool are the directory's, and the form says so.
+    await expect(page.getByText("Its name and category come from the directory and cannot be changed here.")).toBeVisible();
+    await expect(page.locator("#c-name")).toHaveJSProperty("readOnly", true);
+    await expect(page.locator("#c-cat")).toBeDisabled();
+    // Pointing the form at another url unlocks them.
+    await page.locator("#c-url").fill("github.com/someone/other-tool");
+    await expect(page.locator("#c-cat")).toBeEnabled();
+    await expect(page.getByText("If the URL is already in the directory, its entry keeps its own.")).toBeVisible();
   });
 
   test("a listed tool with a claim links to its page", async ({ page, request }) => {

@@ -28,7 +28,8 @@ test("a stale-dated real signature is rejected on the date check", async ({ requ
 });
 
 test("wizard: valid CLI signature verifies and registers end to end", async ({ page }) => {
-  const c = watchConsole(page);
+  // A rejected registration is an HTTP 422, which the browser logs by itself.
+  const c = watchConsole(page, [/status of 422/]);
   await page.clock.setFixedTime(new Date("2026-10-07T12:00:00Z"));
   await fillStep1(page);
 
@@ -101,7 +102,7 @@ test("wizard: a reload keeps the fields, the step and the pasted signature", asy
   await page.getByRole("button", { name: "Back" }).click();
   await expect(page.locator("#c-name")).toHaveValue("Proof of Tooling");
   await expect(page.locator("#c-cat")).toHaveValue("Meta");
-  await expect(page.locator("#c-url")).toHaveValue(TOOL);
+  await expect(page.locator("#c-url")).toHaveValue(`https://www.${TOOL}/`);
   await expect(page.locator("#c-id")).toHaveValue(fixture.identity);
 });
 
@@ -141,14 +142,27 @@ test("wizard: sites get three accessible proof methods", async ({ page }) => {
   await page.locator("#c-url").fill("pool.example.com/watch");
   await page.locator("#c-id").fill(fixture.identity);
   await page.getByRole("button", { name: "Generate claim" }).click();
-  const tabs = page.getByRole("tab");
+  const proof = page.getByRole("tablist", { name: "Ways to prove you own this site" });
+  const tabs = proof.getByRole("tab");
   await expect(tabs).toHaveCount(3);
   await tabs.first().focus();
   await page.keyboard.press("ArrowRight");
   await expect(page.getByRole("tab", { name: "DNS TXT" })).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByRole("tabpanel")).toContainText(`proof-of-tooling=${fixture.identity}`);
+  const panel = page.locator("#pt-panel-dns");
+  await expect(panel).toContainText(`proof-of-tooling=${fixture.identity}`);
   await page.keyboard.press("ArrowRight");
-  await expect(page.getByRole("tabpanel")).toContainText('<meta name="proof-of-tooling"');
+  await expect(page.locator("#pt-panel-meta")).toContainText('<meta name="proof-of-tooling"');
+});
+
+test("wizard: signing instructions name the identity key and offer Ledger and another machine", async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-10-07T12:00:00Z"));
+  await fillStep1(page);
+  await expect(page.getByText("Not the vote account key and not the withdrawer key")).toBeVisible();
+  await expect(page.getByText(`solana sign-offchain-message -k ~/validator-keypair.json "${valid.message}"`)).toBeVisible();
+  await page.getByRole("tab", { name: "Ledger" }).click();
+  await expect(page.getByText(`solana sign-offchain-message -k usb://ledger "${valid.message}"`)).toBeVisible();
+  await page.getByRole("tab", { name: "Another machine" }).click();
+  await expect(page.locator("#sg-panel-remote")).toContainText("copy only the base58 signature");
 });
 
 test("registering the same claim twice is idempotent", async ({ request }) => {

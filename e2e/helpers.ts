@@ -1,10 +1,10 @@
 import { expect, type Page } from "@playwright/test";
 
 /** Collects console errors and page errors; call `expectClean()` at the end of a test. */
-export function watchConsole(page: Page) {
+export function watchConsole(page: Page, ignore: RegExp[] = []) {
   const errors: string[] = [];
   page.on("console", (m) => {
-    if (m.type() === "error") errors.push(`console: ${m.text()}`);
+    if (m.type() === "error" && !ignore.some((r) => r.test(m.text()))) errors.push(`console: ${m.text()}`);
   });
   page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
   return { expectClean: () => expect(errors).toEqual([]) };

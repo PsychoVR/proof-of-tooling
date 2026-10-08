@@ -54,3 +54,15 @@ export function toolPillStatus(
   const waiting = tool.claims.some((c) => c.status === "pending" && (!identity || c.identity === identity));
   return waiting ? "pending" : "unclaimed";
 }
+
+/** "Jito · 12,345 SOL delegated": English grouping, whole SOL. Control characters in the name are dropped. */
+export function formatPoolLabel(name: string, sol: number): string {
+  const clean = name.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, "").trim();
+  const n = Number.isFinite(sol) ? Math.max(0, Math.round(sol)) : 0;
+  return `${clean} · ${n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")} SOL delegated`;
+}
+
+/** Splits pools into the first `max` and the rest, keeping the received order. */
+export function splitPools<T>(pools: readonly T[], max: number): { shown: T[]; hidden: T[] } {
+  return { shown: pools.slice(0, max), hidden: pools.slice(max) };
+}

@@ -44,7 +44,7 @@ test.describe("stake pool badges", () => {
     await expect(page.locator(".pool-tip")).toHaveText("Solana Foundation · 4,000 SOL delegated");
 
     await gotoHydrated(page, "/");
-    const row = page.locator("tbody tr", { hasText: "Overclock" });
+    const row = page.locator("tbody tr", { hasText: "Overclock" }).locator("td.c-pools");
     await expect(row.locator(".pool-badge")).toHaveCount(2);
     await expect(row.locator(".pool-badge").first()).toHaveAttribute("aria-label", "Solana Foundation · 4,000 SOL delegated");
     await expect(row.getByLabel("SFDP participant")).toHaveCount(0);
@@ -67,7 +67,7 @@ test.describe("stake pool badges", () => {
     expect(parseFloat(styles.radius)).toBeGreaterThan(10);
     expect(styles.bg).not.toBe("rgba(0, 0, 0, 0)");
     await gotoHydrated(page, "/");
-    const row = page.locator("tbody tr", { hasText: "Pumpkin" });
+    const row = page.locator("tbody tr", { hasText: "Pumpkin" }).locator("td.c-pools");
     await expect(row.locator(".pool-badge.sfdp.chip")).toHaveText("SFDP");
   });
 
@@ -107,7 +107,7 @@ test.describe("stake pool badges", () => {
       if (r.url().startsWith("http") && new URL(r.url()).origin !== origin) foreign.push(r.url());
     });
     await gotoHydrated(page, "/");
-    const row = page.locator("tbody tr", { hasText: "Pumpkin's Pool" });
+    const row = page.locator("tbody tr", { hasText: "Pumpkin's Pool" }).locator("td.c-pools");
     await expect(row.locator(".pool-badge:not(.more):not(.sfdp)")).toHaveCount(3);
     const more = row.locator(".pool-badge.more");
     await expect(more).toHaveText("+2");
@@ -117,13 +117,56 @@ test.describe("stake pool badges", () => {
     await expect(row.getByLabel("SFDP participant")).toHaveText("SFDP");
     await more.focus();
     await expect(page.locator(".pool-tip")).toContainText("The Vault");
-    const other = page.locator("tbody tr", { hasText: "Overclock" });
+    const other = page.locator("tbody tr", { hasText: "Overclock" }).locator("td.c-pools");
     await expect(other.locator(".pool-badge")).toHaveCount(2);
     await expect(other.locator(".pool-badge.more")).toHaveCount(0);
     for (const src of await page.locator(".pool-ico img").evaluateAll((els) => els.map((e) => e.getAttribute("src") ?? ""))) {
       expect(src).toMatch(/^\/pools\/[a-z-]+\.(png|svg)$/);
     }
     expect(foreign).toEqual([]);
+  });
+
+  test("home ledger has a Stake from column right after the name, with aligned icons and empty cells for rows without badges", async ({ page }) => {
+    await page.setViewportSize({ width: 1200, height: 900 });
+    await gotoHydrated(page, "/");
+    const heads = await page.locator("table.ledger thead th").allTextContents();
+    expect(heads.slice(0, 3)).toEqual(["#", "Validator", "Stake from"]);
+    await expect(page.getByRole("columnheader", { name: "Stake from" })).toBeVisible();
+    // the stacked mobile copy is not displayed on desktop
+    await expect(page.locator("table.ledger .pool-row-m").first()).toBeHidden();
+    const rows = page.locator("table.ledger tbody tr");
+    const n = await rows.count();
+    const lefts: number[] = [];
+    let empty = 0;
+    for (let i = 0; i < n; i++) {
+      const cell = rows.nth(i).locator("td.c-pools");
+      const first = cell.locator(".pool-badge").first();
+      if ((await cell.locator(".pool-badge").count()) === 0) {
+        empty++;
+        expect((await cell.innerText()).trim()).toBe("");
+      } else {
+        lefts.push(Math.round((await first.boundingBox())!.x));
+      }
+    }
+    expect(lefts.length + empty).toBe(n);
+    expect(new Set(lefts).size).toBe(1); // icons start at the same x on every row
+    const overflow = await page.evaluate(() => {
+      const w = document.querySelector(".table-wrap") as HTMLElement;
+      return { page: document.documentElement.scrollWidth - document.documentElement.clientWidth, wrap: w.scrollWidth - w.clientWidth };
+    });
+    expect(overflow.page).toBeLessThanOrEqual(0);
+    expect(overflow.wrap).toBeLessThanOrEqual(0);
+    // badges sit on one line
+    const ys = await rows.filter({ hasText: "Pumpkin's Pool" }).locator("td.c-pools .pool-badge").evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
+    expect(new Set(ys).size).toBe(1);
+  });
+
+  test("profile badges sit in one horizontal row under the name", async ({ page }) => {
+    await gotoHydrated(page, `/v/${V.pumpkin.identity}`);
+    const head = await page.locator(".detail-head").boundingBox();
+    const ys = await page.locator(".pool-section .pool-badge").evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
+    expect(ys.length - new Set(ys).size).toBeGreaterThan(0); // several badges share a line (wrapping allowed when they do not fit)
+    expect(Math.min(...ys)).toBeGreaterThan(head!.y + head!.height - 2);
   });
 
   test("@mobile badges fit at 375px without horizontal scroll", async ({ page }) => {
@@ -135,10 +178,11 @@ test.describe("stake pool badges", () => {
     }
     await gotoHydrated(page, "/");
     const row = page.locator("table.ledger tbody tr", { hasText: "Pumpkin's Pool" });
-    await expect(row.locator(".pool-badge.more")).toHaveText("+2");
-    const box = await row.locator(".pool-row").boundingBox();
+    await expect(row.locator("td.c-pools")).toBeHidden();
+    await expect(row.locator(".pool-row-m .pool-badge.more")).toHaveText("+2");
+    const box = await row.locator(".pool-row-m").boundingBox();
     expect(box!.x + box!.width).toBeLessThanOrEqual(375);
-    await row.locator(".pool-badge.more").focus();
+    await row.locator(".pool-row-m .pool-badge.more").focus();
     const tip = await page.locator(".pool-tip").boundingBox();
     expect(tip!.x).toBeGreaterThanOrEqual(0);
     expect(tip!.x + tip!.width).toBeLessThanOrEqual(375);

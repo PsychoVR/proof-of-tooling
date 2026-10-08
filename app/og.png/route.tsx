@@ -8,7 +8,8 @@ import { SITE_NAME, TAGLINE } from "@/lib/seo";
 export const dynamic = "force-dynamic";
 
 // Colours and type follow the dark theme of the design prototype (tokens), so the card matches the site.
-const C = { bg: "#0f1514", surface: "#151d1b", line: "#26332f", fg: "#e7ecea", muted: "#8fa09a", accent: "#f2b544", digitBg: "#0a0e0d", digitFg: "#f6c35a", accentInk: "#1a1204" };
+const C = { bg: "#0f1514", surface: "#151d1b", line: "#26332f", fg: "#e7ecea", muted: "#8fa09a", accent: "#00ff8b", digitBg: "#0a0e0d", digitFg: "#14f195", accentInk: "#000" };
+const GRAD = "linear-gradient(to top right, #14f195 0%, #22a7bc 50%, #9945ff 100%)";
 
 // Font files live in the repository (assets/fonts, OFL): nothing is downloaded at build or run time.
 const FONT_DIR = path.join(process.cwd(), "assets", "fonts");
@@ -39,7 +40,14 @@ async function render(counters: Counters): Promise<ArrayBuffer> {
       <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", justifyContent: "space-between", background: C.bg, color: C.fg, padding: 56, fontFamily: "Body" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <svg width="44" height="44" viewBox="0 0 26 26">
-            <rect x="1" y="1" width="24" height="24" rx="5" fill={C.accent} />
+            <defs>
+              <linearGradient id="g" x1="0" y1="1" x2="1" y2="0">
+                <stop offset="0" stopColor="#14f195" />
+                <stop offset=".5" stopColor="#22a7bc" />
+                <stop offset="1" stopColor="#9945ff" />
+              </linearGradient>
+            </defs>
+            <rect x="1" y="1" width="24" height="24" rx="5" fill="url(#g)" />
             <path d="M7 7v12M11 7v12M15 7v12M19 7v12M5 17L21 9" stroke={C.accentInk} strokeWidth="2.2" strokeLinecap="round" fill="none" />
           </svg>
           <div style={{ fontFamily: "Display", fontWeight: 800, fontSize: 40, letterSpacing: 1, textTransform: "uppercase" }}>{SITE_NAME}</div>
@@ -50,8 +58,10 @@ async function render(counters: Counters): Promise<ArrayBuffer> {
           {digits ? (
             <div style={{ display: "flex", alignItems: "flex-end", gap: 10 }}>
               {digits.map((d, i) => (
-                <div key={i} style={{ width: 88, height: 124, display: "flex", alignItems: "center", justifyContent: "center", background: C.digitBg, borderRadius: 8, border: `1px solid ${C.line}`, color: C.digitFg, fontFamily: "Display", fontWeight: 800, fontSize: 104 }}>
-                  {d}
+                <div key={i} style={{ width: 88, height: 124, display: "flex", padding: 2, background: GRAD, borderRadius: 8 }}>
+                  <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: C.digitBg, borderRadius: 6, color: C.digitFg, fontFamily: "Display", fontWeight: 800, fontSize: 104 }}>
+                    {d}
+                  </div>
                 </div>
               ))}
               <div style={{ display: "flex", flexDirection: "column", marginLeft: 14, paddingBottom: 6 }}>

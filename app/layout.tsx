@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { connection } from "next/server";
-import { Big_Shoulders, Hanken_Grotesk, JetBrains_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
@@ -14,19 +14,30 @@ export const metadata: Metadata = {
   ...pageMetadata({}),
 };
 
-// Self-hosted at build time: no request to Google at runtime, so the CSP needs no external font origins.
+// Font files live in the repository (assets/fonts, OFL): the build never reaches a font CDN.
 // Next has no metrics for Big Shoulders, so it cannot derive a size-matched fallback (that warned at every build).
 // Impact and Arial Narrow are condensed faces of similar width, which keeps the swap from shifting the layout.
-const display = Big_Shoulders({
-  subsets: ["latin"],
-  weight: ["600", "800"],
+const display = localFont({
+  src: [{ path: "../assets/fonts/BigShoulders-800.woff2", weight: "800", style: "normal" }],
   variable: "--ff-display",
   display: "swap",
   adjustFontFallback: false,
   fallback: ["Impact", "Arial Narrow", "sans-serif"],
 });
-const body = Hanken_Grotesk({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--ff-body", display: "swap" });
-const mono = JetBrains_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--ff-mono", display: "swap" });
+const body = localFont({
+  src: [{ path: "../assets/fonts/HankenGrotesk-400.woff2", weight: "400", style: "normal" },
+    { path: "../assets/fonts/HankenGrotesk-500.woff2", weight: "500", style: "normal" },
+    { path: "../assets/fonts/HankenGrotesk-600.woff2", weight: "600", style: "normal" },
+    { path: "../assets/fonts/HankenGrotesk-700.woff2", weight: "700", style: "normal" }],
+  variable: "--ff-body",
+  display: "swap",
+});
+const mono = localFont({
+  src: [{ path: "../assets/fonts/JetBrainsMono-400.woff2", weight: "400", style: "normal" },
+    { path: "../assets/fonts/JetBrainsMono-500.woff2", weight: "500", style: "normal" }],
+  variable: "--ff-mono",
+  display: "swap",
+});
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // Render every page per request so the CSP nonce set in proxy.ts can be applied to Next's scripts.

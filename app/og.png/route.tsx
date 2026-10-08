@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element -- next/og renders plain img elements */
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { ImageResponse } from "next/og";
@@ -29,11 +30,18 @@ const fonts = (() => {
     ]));
 })();
 
+// Small mark for the corner of the card, inlined once as a data URI (the renderer cannot fetch relative URLs).
+const logo = (() => {
+  let cached: Promise<string> | undefined;
+  return () => (cached ??= readFile(path.join(process.cwd(), "public", "brand", "sunshinevr-96.png")).then((b) => `data:image/png;base64,${b.toString("base64")}`));
+})();
+
 type Counters = { tools: number; validators: number } | null;
 
 let memo: { at: number; body: ArrayBuffer; counters: Counters } | undefined;
 
 async function render(counters: Counters): Promise<ArrayBuffer> {
+  const mark = await logo().catch(() => null);
   const digits = counters ? odometerDigits(counters.tools) : null;
   const image = new ImageResponse(
     (
@@ -74,7 +82,10 @@ async function render(counters: Counters): Promise<ArrayBuffer> {
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${C.line}`, paddingTop: 22, fontFamily: "Mono", fontWeight: 500, fontSize: 24, color: C.muted }}>
           <div style={{ display: "flex" }}>{counters ? `${counters.validators} validators tracked` : "Solana validators"}</div>
-          <div style={{ display: "flex", color: C.accent }}>tooling.sunshinevr.io</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, color: C.accent }}>
+            {mark ? (<img src={mark} width={34} height={34} style={{ borderRadius: 8 }} alt="" />) : null}
+            tooling.sunshinevr.io
+          </div>
         </div>
       </div>
     ),

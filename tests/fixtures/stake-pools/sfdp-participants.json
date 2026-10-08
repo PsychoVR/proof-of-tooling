@@ -1,0 +1,48 @@
+{
+  "observedAt": "2026-10-08T20:55:52.798Z",
+  "totalRows": 10979,
+  "rows": [
+    {
+      "mainnetBetaPubkey": "pineXRUnbaLNFMxaM3zBmFfTiKgQMGqT9jYHXZWq2Fw",
+      "testnetPubkey": "pineBbb5K6SdV6KG1xibsR5DM1XsWuajtXSy3YYGY4N",
+      "state": "Approved",
+      "sfdp2OnboardingEpoch": 845
+    },
+    {
+      "mainnetBetaPubkey": "97jbhVBYcSmwGXjrx5PPWXucDsVBqwyoQ6rzP3B6eeMt",
+      "testnetPubkey": "i4RxHRZKuX7XRGvfqBZJFtW2zLeseDGYdRgrYsX5WuA",
+      "state": "Approved",
+      "sfdp2OnboardingEpoch": 832
+    },
+    {
+      "mainnetBetaPubkey": "6XKqyUVUcpe3CNucjF6gk5zonJDqNGvob6kaTy4Ps1U",
+      "testnetPubkey": "3hYRQy24ignXEKR6YsV1h4xyR35AhnBoegJiGxBoYxbA",
+      "state": "Approved",
+      "sfdp2OnboardingEpoch": 844
+    },
+    {
+      "mainnetBetaPubkey": "HEcbnUUDKXdoQ1E86EuMZWsp8ZzNwSwQYySCJ4AMGeDg",
+      "testnetPubkey": "G4Vwojv59yVagfEq7zd6XZ7LKuEWpR5tv19xgToqBiAX",
+      "state": "Retired",
+      "sfdp2OnboardingEpoch": null
+    },
+    {
+      "mainnetBetaPubkey": "4chf5YHSa9wLnyyT9sB1QQzzwewmBaVPvYjtwkDE6psa",
+      "testnetPubkey": "6HuwR9etJqZY2ZAMSFcyZepgwNJZeeDcjev26njTJgMf",
+      "state": "Rejected",
+      "sfdp2OnboardingEpoch": null
+    },
+    {
+      "mainnetBetaPubkey": "9BiufH4o8orQ7RrUnMTcP1Ze8Phsd21rP3145Fencya6",
+      "testnetPubkey": "5tvaGvRr7GCJMaXwawYgk6vjd8fJxQyrNazVN9QUQCMd",
+      "state": "Pending",
+      "sfdp2OnboardingEpoch": null
+    },
+    {
+      "mainnetBetaPubkey": "2MFZGZeiTh2Q76iaW7wn4uFAq4MUijKUF76FRB4WcMzs",
+      "testnetPubkey": "7ioBn8ahtLYDRXd1MdbU8VqUiwSYn2hP29nRUpNRiBvS",
+      "state": "TestnetOnboarded",
+      "sfdp2OnboardingEpoch": null
+    }
+  ]
+}

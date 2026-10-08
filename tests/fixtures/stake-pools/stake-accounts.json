@@ -1,0 +1,138 @@
+{
+  "epoch": 1052,
+  "observedAt": "2026-10-08T20:55:33.056Z",
+  "accounts": [
+    {
+      "id": "jito",
+      "account": "ENsqSZhfLg3qARNizYkk5gJZe9DTovjWBuyp9Y28feGw",
+      "owner": "Stake11111111111111111111111111111111111111",
+      "vote": "3iPuTgpWaaC6jYEY7kd993QBthGsQTK3yPCrNJyPMhCD",
+      "staker": "6iQKfEyhr3bZMotVkW6beNZz5CPAkiwvgV2CTje9pVSS",
+      "withdrawer": "6iQKfEyhr3bZMotVkW6beNZz5CPAkiwvgV2CTje9pVSS",
+      "lamports": "31681546853711",
+      "activation": "414",
+      "deactivation": "18446744073709551615",
+      "sliceBase64": "VOWeJMBRqKFKex6Xl/DhLN+nSQIWZTGVpqUSpvFmYCtU5Z4kwFGooUp7HpeX8OEs36dJAhZlMZWmpRKm8WZgKwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAChSFdA0WfrDr6ClUs+Mu3nkqrGMBE5tDHIfA9ot+QNqT51Yb9AcAACeAQAAAAAAAP//////////"
+    },
+    {
+      "id": "blazestake",
+      "account": "EUitbRd2J3txbjQv4iVedPYDr23FSiCvSCEF24qZd2DL",
+      "owner": "Stake11111111111111111111111111111111111111",
+      "vote": "644K33yWfSzc32VvY5fRUfUqphw8LTaLQntCkyEpJ8h7",
+      "staker": "6WecYymEARvjG5ZyqkrVQ6YkhPfujNzWpSPwNKXHCbV2",
+      "withdrawer": "6WecYymEARvjG5ZyqkrVQ6YkhPfujNzWpSPwNKXHCbV2",
+      "lamports": "11398636956665",
+      "activation": "332",
+      "deactivation": "18446744073709551615",
+      "sliceBase64": "UeLOpIidOn+P5CE01YI9fcxOSS+/rEGZUv14Q3lLyZlR4s6kiJ06f4/kITTVgj19zE5JL7+sQZlS/XhDeUvJmQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEsS67dnuS5g4d9j+WwLbKtjWDZkMmCDKWKJQsSmS/dK+eu0810KAABMAQAAAAAAAP//////////"
+    },
+    {
+      "id": "jpool",
+      "account": "2UcenCqtvSGVfNiznTNPrDBKg8HvV5zg1q5S3nyhVrNM",
+      "owner": "Stake11111111111111111111111111111111111111",
+      "vote": "DPmsofVJ1UMRZADgwYAHotJnazMwohHzRHSoomL6Qcao",
+      "staker": "HbJTxftxnXgpePCshA8FubsRj9MW4kfPscfuUfn44fnt",
+      "withdrawer": "HbJTxftxnXgpePCshA8FubsRj9MW4kfPscfuUfn44fnt",
+      "lamports": "52365951049914",
+      "activation": "747",
+      "deactivation": "18446744073709551615",
+      "sliceBase64": "9oR8YgMRNszTKY0EcYSDXeciHmDumiguufpxwf9ndYX2hHxiAxE2zNMpjQRxhINd5yIeYO6aKC65+nHB/2d1hQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAALghwyZSLGWZT8Xmlx2vuYSW73f10qjxNK/Sb4Je8kdcuiDpZaAvAADrAgAAAAAAAP//////////"
+    },
+    {
+      "id": "vault",
+      "account": "EEysfJcpxotBFXUtzrBwXPn23KEXqAaZ6EQfVnmz5H8p",
+      "owner": "Stake11111111111111111111111111111111111111",
+      "vote": "5daP6pZoPSak6UEKuRg2HHjvTPpqqwB113oNamGNKuuZ",
+      "staker": "GdNXJobf8fbTR5JSE7adxa6niaygjx4EEbnnRaDCHMMW",
+      "withdrawer": "GdNXJobf8fbTR5JSE7adxa6niaygjx4EEbnnRaDCHMMW",
+      "lamports": "41309682392839",
+      "activation": "727",
+      "deactivation": "18446744073709551615",
+      "sliceBase64": "6DCMcunO/eE5nQpbh+J+klQTroQs2Xwa7FXR/nwqimXoMIxy6c794TmdCluH4n6SVBOuhCzZfBrsVdH+fCqKZQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAETNZqEMFB9oH21HxSFp1Npd5u+SfFfDW66OpB8831s4B9/xKJIlAADXAgAAAAAAAP//////////"
+    },
+    {
+      "id": "aero",
+      "account": "RmsgDjEzkVd7oLNEkJ8QR7XPpdowYHMVQVPDba4Yd1A",
+      "owner": "Stake11111111111111111111111111111111111111",
+      "vote": "eyeVhGmVEoPSWmQU2wP5WZmMihPBTCk7kMMm4VhuAKS",
+      "staker": "AKJt3m2xJ6ANda9adBGqb5BMrheKJSwxyCfYkLuZNmjn",
+      "withdrawer": "AKJt3m2xJ6ANda9adBGqb5BMrheKJSwxyCfYkLuZNmjn",
+      "lamports": "12681529330491",
+      "activation": "660",
+      "deactivation": "18446744073709551615",
+      "sliceBase64": "imnaoZ5Fa+9APoT2a/zClkOSreft8qoF27xeYy1eKOmKadqhnkVr70A+hPZr/MKWQ5Kt5+3yqgXbvF5jLV4o6QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAm6ilCo5E/vfVAlpk+5ovlfjbr10wzjmfAXt3H3aJtROwsNpogLAACUAgAAAAAAAP//////////"
+    },
+    {
+      "id": "sanctum-spl",
+      "account": "4QmxjqLJTeAh41JZM5ppZUrMY5Gd97oAfZvBXyWkyygJ",
+      "owner": "Stake11111111111111111111111111111111111111",
+      "vote": "FACqsS19VScz8oo2YhdMg35EsAy6xsCZ9Y58eJXGv8QJ",
+      "staker": "6Sw4WcMTakZFrd19Q4hTH8ewiLxXXTCuBdVxAaneg1fo",
+      "withdrawer": "6Sw4WcMTakZFrd19Q4hTH8ewiLxXXTCuBdVxAaneg1fo",
+      "lamports": "28464099878300",
+      "activation": "588",
+      "deactivation": "18446744073709551615",
+      "sliceBase64": "UO8Uz3Cgu78Nlkos5uv1THisjLh0ogDeJ8RoWKrhsRJQ7xTPcKC7vw2WSizm6/VMeKyMuHSiAN4nxGhYquGxEgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAANJfPBUGJdkh/GxGXgqqOGvYHpDrkJ5rvWs7ovzwVxH7nOWPUOMZAABMAgAAAAAAAP//////////"
+    },
+    {
+      "id": "sanctum-multi",
+      "account": "EmutJdbKJ55hUyth15bar8ZxDCchR44udAXWYg9eLLDL",
+      "owner": "Stake11111111111111111111111111111111111111",
+      "vote": "CatzoSMUkTRidT5DwBxAC2pEtnwMBTpkCepHkFgZDiqb",
+      "staker": "EMjuABxELpYWYEwjkKmQKBNCwdaFAy4QYAs6W9bDQDNw",
+      "withdrawer": "EMjuABxELpYWYEwjkKmQKBNCwdaFAy4QYAs6W9bDQDNw",
+      "lamports": "4525005630579577",
+      "activation": "596",
+      "deactivation": "18446744073709551615",
+      "sliceBase64": "xngNdxTPBkMOkXkWBYY4YcdkKJjH1PCrBsaFt4XiP8DGeA13FM8GQw6ReRYFhjhhx2QomMfU8KsGxoW3heI/wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKwfg/25zlUN6V1VjNx5VGHM9DdKxojsE6mEACIKeNoGeaM3+XcTEABUAgAAAAAAAP//////////"
+    },
+    {
+      "id": "marinade",
+      "account": "3tGbZed4ZfxR56CjxQW5kAghcz5gr7fzcXisWFkhdjeG",
+      "owner": "Stake11111111111111111111111111111111111111",
+      "vote": "HHLMTHR9YoyDNsWKVJBT5AKrX86iQjkiKRFRrnaFubgq",
+      "staker": "4bZ6o3eUUNXhKuqjdCnCoPAoLgWiuLYixKaxoa8PpiKk",
+      "withdrawer": "9eG63CdHjsfhHmobHgLtESGC8GabbmRcaSpHAZrtmhco",
+      "lamports": "26395327274558",
+      "activation": "975",
+      "deactivation": "18446744073709551615",
+      "sliceBase64": "NW0aj6LBKPbJQ/wTWTSoQgM4pWWci256Ye2TQjl8FVuAaQtLGkbornYeejJYw3kxRYbab8LmYo3X4irqaL1q7AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPHqKnZIT4JgauOSuHkx1pIlDQCAukuyBuVsa+/btbguPh4bpAEYAADPAwAAAAAAAP//////////"
+    },
+    {
+      "id": "marinade-native",
+      "account": "Fcidoikt2pUi81SGLELjsqUdeFVV41c8yWMSQPaMMnGK",
+      "owner": "Stake11111111111111111111111111111111111111",
+      "vote": "HHLMTHR9YoyDNsWKVJBT5AKrX86iQjkiKRFRrnaFubgq",
+      "staker": "stWirqFCf2Uts1JBL1Jsd3r6VBWhgnpdPxCTe1MFjrq",
+      "withdrawer": "BnwZvGydWCKzpRGAkeTKH73NVDfy38Dpj9nbpsbiw6tR",
+      "lamports": "67766443155716",
+      "activation": "1030",
+      "deactivation": "18446744073709551615",
+      "sliceBase64": "DQlJJ4FMBfGa9x5M0p8VekVAMGGyvA9FfzQf+TgU5+KgWbSVvmuxiXMqeCRElCW/QLuxBn+T6jrW1T30ZxFimgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPHqKnZIT4JgauOSuHkx1pIlDQCAukuyBuVsa+/btbguBKHFGqI9AAAGBAAAAAAAAP//////////"
+    },
+    {
+      "id": "deactivated",
+      "account": "5eUEWsUV3ZcW2xcMFAaTG88EJNkrA2PyhL1q9FdjEPnT",
+      "owner": "Stake11111111111111111111111111111111111111",
+      "vote": "CcaHc2L43ZWjwCHART3oZoJvHLAe9hzT2DJNUpBzoTN1",
+      "staker": "9uyDy9VDBw4K7xoSkhmCAm8NAFCwu4pkF6JeHUCtVKcX",
+      "withdrawer": "9uyDy9VDBw4K7xoSkhmCAm8NAFCwu4pkF6JeHUCtVKcX",
+      "lamports": "3965331520675628",
+      "activation": "517",
+      "deactivation": "526",
+      "sliceBase64": "hG9FCrzfWQkZTv+TKrCSZiHQkqwpAdK+bhkLOYXHXMSEb0UKvN9ZCRlO/5MqsJJmIdCSrCkB0r5uGQs5hcdcxAAAAAAAAAAAAAAAAAAAAACEb0UKvN9ZCRlO/5MqsJJmIdCSrCkB0r5uGQs5hcdcxKyNhXuOGzzi/Fj9W3ZSmVPsPN36OznqdkaJSXFYv1aqLN+0sHIWDgAFAgAAAAAAAA4CAAAAAAAA"
+    },
+    {
+      "id": "deactivating",
+      "account": "2kvtKmyFsYvKjQHUtttdRcMbL4UauQeBCbP4oeaLY8wG",
+      "owner": "Stake11111111111111111111111111111111111111",
+      "vote": "CcaHc2L43ZWjwCHART3oZoJvHLAe9hzT2DJNUpBzoTN1",
+      "staker": "CCyieXV1E2Pyi2UssnDaGykcTDjfw1aK8MJYiyqKPkTb",
+      "withdrawer": "CCyieXV1E2Pyi2UssnDaGykcTDjfw1aK8MJYiyqKPkTb",
+      "lamports": "2272230281140",
+      "activation": "779",
+      "deactivation": "1052",
+      "sliceBase64": "poITjqD+2IWtXbQH3NT/yDRp8bKAJVXjM2Q4+av74SKmghOOoP7Yha1dtAfc1P/INGnxsoAlVeMzZDj5q/vhIgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKyNhXuOGzzi/Fj9W3ZSmVPsPN36OznqdkaJSXFYv1aqtI96CxECAAALAwAAAAAAABwEAAAAAAAA"
+    }
+  ]
+}

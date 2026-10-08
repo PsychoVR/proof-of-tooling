@@ -143,6 +143,12 @@ export async function getToolBySlug(slug: string): Promise<ToolWithClaims | null
   return (await withClaims(rows))[0] ?? null;
 }
 
+/** Tool by canonical url (normalizeToolUrl form), with its claims; null when the url is not listed. */
+export async function getToolByUrl(url: string): Promise<ToolWithClaims | null> {
+  const rows = await getDb().select().from(tools).where(eq(tools.url, url)).limit(1);
+  return (await withClaims(rows))[0] ?? null;
+}
+
 export async function getToolSlugById(id: number): Promise<string | null> {
   const rows = await getDb().select({ slug: tools.slug }).from(tools).where(eq(tools.id, id)).limit(1);
   return rows[0]?.slug ?? null;

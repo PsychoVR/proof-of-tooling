@@ -25,11 +25,18 @@ import { WebProofTabs } from "./WebProofTabs";
 const PROOF_FILE = ".proof-of-tooling.json";
 const STEPS = ["Describe the tool", "Sign the claim", "Verify the signature"];
 
-export function ClaimWizard({ initial }: { initial?: ClaimPrefill }) {
+export interface ListedTool {
+  slug: string;
+  /** True when the tool already has an active claim. */
+  claimed: boolean;
+  creditedTo: string | null;
+}
+
+export function ClaimWizard({ initial, listed }: { initial?: ClaimPrefill; listed?: ListedTool }) {
   const [step, setStep] = useState(0);
   const [toolName, setToolName] = useState(initial?.name ?? "");
   const [url, setUrl] = useState(initial?.url ?? "");
-  const [category, setCategory] = useState<Category>(initial?.category ?? "Monitoring");
+  const [category, setCategory] = useState<Category | "">(initial?.category ?? "");
   const [identity, setIdentity] = useState("");
   const [signature, setSignature] = useState("");
   const [touched, setTouched] = useState(false);
@@ -55,11 +62,11 @@ export function ClaimWizard({ initial }: { initial?: ClaimPrefill }) {
       .catch(() => {});
     return () => ctl.abort();
   }, [repoKey, step]);
-  const request = { message, signature: signature.trim(), category, toolName: toolName.trim() };
+  const request = { message, signature: signature.trim(), category: category || undefined, toolName: toolName.trim() };
 
   const next = () => {
     setTouched(true);
-    if (urlErr || idErr || !toolName.trim()) return;
+    if (urlErr || idErr || !toolName.trim() || !category) return;
     setTouched(false);
     setStep(1);
   };
@@ -101,19 +108,34 @@ export function ClaimWizard({ initial }: { initial?: ClaimPrefill }) {
             <span className="num" aria-hidden="true">1</span>
             <h2>Describe the tool</h2>
           </div>
+          {listed && (
+            <p className="note" role="status">
+              {listed.claimed ? (
+                <>
+                  This tool already has an active claim. <Link className="linkplain" href={`/t/${listed.slug}`}>See its page</Link>; you can still add your own claim.
+                </>
+              ) : (
+                <>
+                  This tool is already listed, unclaimed{listed.creditedTo ? `, credited to ${listed.creditedTo}` : ""}.
+                </>
+              )}
+            </p>
+          )}
           <div className="row2">
             <div className="field">
               <label htmlFor="c-name">Tool name</label>
-              <input id="c-name" value={toolName} maxLength={80} onChange={(e) => setToolName(e.target.value)} placeholder="Proof of Tooling" aria-invalid={touched && !toolName.trim()} />
+              <input id="c-name" value={toolName} maxLength={80} onChange={(e) => setToolName(e.target.value)} placeholder="e.g. My validator dashboard" aria-invalid={touched && !toolName.trim()} />
               {touched && !toolName.trim() && <span className="err">Enter the tool name.</span>}
             </div>
             <div className="field">
               <label htmlFor="c-cat">Category</label>
-              <select id="c-cat" value={category} onChange={(e) => setCategory(e.target.value as Category)}>
+              <select id="c-cat" value={category} onChange={(e) => setCategory(e.target.value as Category | "")} aria-invalid={touched && !category} aria-describedby="c-cat-e">
+                <option value="">Choose a category…</option>
                 {CATEGORIES.map((c) => (
                   <option key={c}>{c}</option>
                 ))}
               </select>
+              {touched && !category && <span id="c-cat-e" className="err">Choose a category.</span>}
             </div>
           </div>
           <div className="field">

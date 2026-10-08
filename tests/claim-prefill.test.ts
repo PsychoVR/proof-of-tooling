@@ -12,7 +12,7 @@ describe("claim prefill", () => {
     expect(parseClaimPrefill({ url: "https://www.github.com/a/b/", category: "Nope" })).toEqual({
       url: "github.com/a/b",
       name: "",
-      category: "Monitoring",
+      category: "",
     });
     expect(parseClaimPrefill({ url: 'a.com/x"; rm' }).url).toBe("");
     expect(parseClaimPrefill({ url: ["github.com/a/b", "other.com"] }).url).toBe("github.com/a/b");

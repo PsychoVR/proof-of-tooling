@@ -209,7 +209,8 @@ export const toolPageUrl = (slug: string) => `${SITE_URL}/t/${slug}`;
 export interface ClaimPrefill {
   url: string;
   name: string;
-  category: Category;
+  /** Empty until the visitor (or the link) picks one. */
+  category: Category | "";
 }
 
 /** Link to the claim form with the tool already filled in (used by "Claim this"). */
@@ -227,6 +228,6 @@ export function parseClaimPrefill(params: Record<string, Param>): ClaimPrefill {
   return {
     url: rawUrl && !validateToolUrl(rawUrl) ? normalizeToolUrl(rawUrl) : "",
     name: first(params.name).replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 80),
-    category: (CATEGORIES as readonly string[]).includes(category) ? (category as Category) : "Monitoring",
+    category: (CATEGORIES as readonly string[]).includes(category) ? (category as Category) : "",
   };
 }

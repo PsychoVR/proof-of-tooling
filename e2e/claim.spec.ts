@@ -91,6 +91,7 @@ test("wizard: valid CLI signature verifies and registers end to end", async ({ p
 test("wizard: sites get three accessible proof methods", async ({ page }) => {
   await gotoHydrated(page, "/claim");
   await page.locator("#c-name").fill("Pool dashboard");
+  await page.locator("#c-cat").selectOption("Dashboard");
   await page.locator("#c-url").fill("pool.example.com/watch");
   await page.locator("#c-id").fill(fixture.identity);
   await page.getByRole("button", { name: "Generate claim" }).click();
@@ -158,9 +159,43 @@ test.describe("claim links", () => {
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(command);
   });
 
+  test("a listed unclaimed tool is prefilled from the directory and says who it is credited to", async ({ page, request }) => {
+    const tools = (await (await request.get("/api/v1/tools")).json()).items as { slug: string; url: string }[];
+    const tool = tools.find((t) => t.slug === "alpenglow-explorer")!;
+    // The link carries a wrong name and category: the directory wins.
+    await gotoHydrated(page, `/claim?url=${encodeURIComponent(tool.url)}&name=Wrong&category=Library`);
+    await expect(page.getByText("This tool is already listed, unclaimed, credited to Valid Blocks.")).toBeVisible();
+    await expect(page.locator("#c-name")).toHaveValue("Alpenglow Explorer");
+    await expect(page.locator("#c-cat")).toHaveValue("Explorer");
+  });
+
+  test("a listed tool with a claim links to its page", async ({ page, request }) => {
+    const tools = (await (await request.get("/api/v1/tools?status=claimed")).json()).items as { slug: string; url: string; name: string }[];
+    const tool = tools[0];
+    await gotoHydrated(page, `/claim?url=${encodeURIComponent(tool.url)}`);
+    await expect(page.getByText("This tool already has an active claim.")).toBeVisible();
+    await expect(page.getByRole("link", { name: "See its page" })).toHaveAttribute("href", `/t/${tool.slug}`);
+    await expect(page.locator("#c-name")).toHaveValue(tool.name);
+  });
+
+  test("a new url starts with an empty name and category, and the category is required", async ({ page }) => {
+    await gotoHydrated(page, "/claim?url=github.com/someone/brand-new-tool");
+    await expect(page.getByText("This tool is already listed")).toHaveCount(0);
+    await expect(page.locator("#c-name")).toHaveAttribute("placeholder", "e.g. My validator dashboard");
+    await expect(page.locator("#c-cat")).toHaveValue("");
+    await expect(page.locator("#c-cat option").first()).toHaveText("Choose a category…");
+    await page.locator("#c-name").fill("Brand New Tool");
+    await page.locator("#c-id").fill(fixture.identity);
+    await page.getByRole("button", { name: "Generate claim" }).click();
+    await expect(page.getByText("Choose a category.")).toBeVisible();
+    await page.locator("#c-cat").selectOption("Library");
+    await page.getByRole("button", { name: "Generate claim" }).click();
+    await expect(page.getByRole("heading", { name: "Sign the claim" })).toBeVisible();
+  });
+
   test("invalid prefill values are ignored", async ({ page }) => {
     await gotoHydrated(page, `/claim?url=${encodeURIComponent('x"; rm -rf /')}&category=Nope&name=%00ok`);
     await expect(page.locator("#c-url")).toHaveValue("");
-    await expect(page.locator("#c-cat")).toHaveValue("Monitoring");
+    await expect(page.locator("#c-cat")).toHaveValue("");
   });
 });

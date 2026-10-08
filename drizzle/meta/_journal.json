@@ -71,6 +71,13 @@
       "when": 1791700000000,
       "tag": "0009_validator_icons",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1791800000000,
+      "tag": "0010_validator_pools",
+      "breakpoints": true
     }
   ]
 }

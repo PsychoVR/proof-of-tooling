@@ -34,7 +34,27 @@ describe("binary collation on keys and signatures (migration 0003)", () => {
     const cols = await rows<{ t: string; c: string; k: string }>(sql`
       SELECT TABLE_NAME AS t, COLUMN_NAME AS c, COLLATION_NAME AS k FROM information_schema.COLUMNS
       WHERE TABLE_SCHEMA = DATABASE() AND COLUMN_NAME IN ('identity', 'vote_account', 'signature') ORDER BY 1, 2`);
-    expect(cols.length).toBe(7);
+    expect(cols.length).toBe(10);
+    for (const c of cols) expect(c.k, `${c.t}.${c.c}`).toBe("ascii_bin");
+  });
+
+  it("uses ascii_bin for the stake pool tables too (migration 0010)", async () => {
+    const cols = await rows<{ t: string; c: string; k: string }>(sql`
+      SELECT TABLE_NAME AS t, COLUMN_NAME AS c, COLLATION_NAME AS k FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ('validator_pool_stake', 'validator_pool_scan', 'validator_sfdp', 'pool_candidates', 'job_runs')
+        AND CHARACTER_SET_NAME = 'ascii' ORDER BY 1, 2`);
+    expect(cols.map((c) => `${c.t}.${c.c}`)).toEqual([
+      "job_runs.name",
+      "pool_candidates.pool",
+      "pool_candidates.pool_mint",
+      "pool_candidates.program",
+      "pool_candidates.validator_list",
+      "pool_candidates.withdraw_authority",
+      "validator_pool_scan.identity",
+      "validator_pool_stake.identity",
+      "validator_pool_stake.pool_id",
+      "validator_sfdp.identity",
+    ]);
     for (const c of cols) expect(c.k, `${c.t}.${c.c}`).toBe("ascii_bin");
   });
 

@@ -41,7 +41,7 @@ export function assertLocalDb(url = process.env.DATABASE_URL ?? "") {
 export async function resetDevDb(db: Db = getDb()) {
   assertLocalDb();
   await db.execute(sql`SET FOREIGN_KEY_CHECKS = 0`);
-  for (const t of ["validator_icons", "claim_failures", "claim_decisions", "endorsements", "claims", "seed_entries", "tools", "validators"]) {
+  for (const t of ["validator_pool_stake", "validator_pool_scan", "validator_sfdp", "pool_candidates", "job_runs", "validator_icons", "claim_failures", "claim_decisions", "endorsements", "claims", "seed_entries", "tools", "validators"]) {
     await db.execute(sql.raw(`TRUNCATE TABLE \`${t}\``));
   }
   await db.execute(sql`SET FOREIGN_KEY_CHECKS = 1`);

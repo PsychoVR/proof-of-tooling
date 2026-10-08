@@ -7,6 +7,7 @@ import {
   int,
   mysqlEnum,
   mysqlTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -14,6 +15,8 @@ import {
 } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
 import { CATEGORIES, CLAIM_STATUSES, CLUSTERS } from "@/lib/types";
+
+export const POOL_CANDIDATE_STATUSES = ["pending", "approved", "rejected"] as const;
 
 export const heartbeat = mysqlTable("heartbeat", {
   id: int("id").autoincrement().primaryKey(),
@@ -54,6 +57,69 @@ export const validatorIcons = mysqlTable("validator_icons", {
   bytes: mediumblob("bytes").notNull(),
   etag: varchar("etag", { length: 64 }).notNull(),
   fetchedAt: timestamp("fetched_at").defaultNow().notNull(),
+});
+
+/**
+ * Active stake that each liquid-staking pool delegates to a verified validator, refreshed by the pools job.
+ * Only pools at or above the minimum are stored. Rows go when the validator loses its active claim.
+ */
+export const validatorPoolStake = mysqlTable(
+  "validator_pool_stake",
+  {
+    identity: varchar("identity", { length: 64 }).notNull(),
+    poolId: varchar("pool_id", { length: 64 }).notNull(),
+    lamports: bigint("lamports", { mode: "bigint", unsigned: true }).notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.identity, t.poolId] })],
+);
+
+/** When each verified validator was last scanned successfully (also when it has no qualifying pool). */
+export const validatorPoolScan = mysqlTable("validator_pool_scan", {
+  identity: varchar("identity", { length: 64 }).primaryKey(),
+  scannedAt: timestamp("scanned_at").defaultNow().notNull(),
+  epoch: int("epoch").notNull(),
+});
+
+/**
+ * SPL stake pools found on chain that are not in the static registry. They are never shown until an admin
+ * approves them with a name and a logo id: names on chain are third-party text anyone can choose.
+ */
+export const poolCandidates = mysqlTable(
+  "pool_candidates",
+  {
+    pool: varchar("pool", { length: 64 }).primaryKey(),
+    poolMint: varchar("pool_mint", { length: 64 }).notNull(),
+    validatorList: varchar("validator_list", { length: 64 }).notNull(),
+    withdrawAuthority: varchar("withdraw_authority", { length: 64 }).notNull(),
+    program: varchar("program", { length: 64 }).notNull(),
+    firstSeen: timestamp("first_seen").defaultNow().notNull(),
+    lastSeen: timestamp("last_seen").defaultNow().notNull(),
+    status: mysqlEnum("status", POOL_CANDIDATE_STATUSES).notNull().default("pending"),
+    /** Set on approval. Curated by the admin, sanitized; never read from the chain. */
+    name: varchar("name", { length: 80 }),
+    /** Set on approval: id of a logo file in public/pools, which is also the pool id on validator profiles. */
+    logoId: varchar("logo_id", { length: 40 }),
+    decidedAt: timestamp("decided_at"),
+    decidedBy: varchar("decided_by", { length: 64 }),
+  },
+  (t) => [index("pool_candidates_status_idx").on(t.status, t.firstSeen)],
+);
+
+/** SFDP membership of verified validators, from the Foundation's public list (only "Approved" counts). */
+export const validatorSfdp = mysqlTable("validator_sfdp", {
+  identity: varchar("identity", { length: 64 }).primaryKey(),
+  participant: boolean("participant").notNull(),
+  /** Last attempt, successful or not. */
+  checkedAt: timestamp("checked_at").defaultNow().notNull(),
+  /** Last attempt that read the list; `participant` is as of this date. */
+  lastOkAt: timestamp("last_ok_at"),
+});
+
+/** Last run of the periodic parts of the pools job (stake pool discovery, SFDP). */
+export const jobRuns = mysqlTable("job_runs", {
+  name: varchar("name", { length: 32 }).primaryKey(),
+  lastRunAt: timestamp("last_run_at").defaultNow().notNull(),
 });
 
 export const tools = mysqlTable(

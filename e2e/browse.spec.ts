@@ -141,6 +141,8 @@ test.describe("profiles and tools", () => {
     await expect(page.locator(".status", { hasText: "In review" })).toBeVisible();
     await page.goto("/t/new-tool");
     await expect(page.locator(".status", { hasText: "In review" }).first()).toBeVisible();
+    await expect(page.getByText("Manual reviews usually take up to 48 h. Questions: DM @proofoftooling on X")).toBeVisible();
+    await expect(page.getByRole("link", { name: "@proofoftooling on X" })).toHaveAttribute("href", "https://x.com/proofoftooling");
     await page.goto("/");
     await expect(page.getByRole("img", { name: /^7 tools/ })).toBeVisible();
   });

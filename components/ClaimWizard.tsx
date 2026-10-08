@@ -20,6 +20,7 @@ import {
 } from "@/lib/ui/claim";
 import Link from "next/link";
 import { Avatar } from "./Avatar";
+import { ReviewNote } from "./ReviewNote";
 import { CodeBlock } from "./CodeBlock";
 import { SignCommandTabs } from "./SignCommandTabs";
 import { WebProofTabs } from "./WebProofTabs";
@@ -313,6 +314,7 @@ function ClaimSuccess({ toolName, identity, slug, inReview }: { toolName: string
           <span className="vname">{who.name}</span>
         </p>
       )}
+      {inReview && <ReviewNote />}
       <div className="btns">
         {slug && !inReview && (
           <Link className="btn primary" href={`/t/${slug}`}>View the tool page</Link>

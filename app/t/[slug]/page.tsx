@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Avatar } from "@/components/Avatar";
+import { ReviewNote } from "@/components/ReviewNote";
 import { StatusPill } from "@/components/StatusPill";
 import { UnclaimedBy } from "@/components/UnclaimedBy";
 import { toolDisplayUrl } from "@/lib/claims/message";
@@ -58,6 +59,13 @@ export default async function ToolPage({ params }: Props) {
         <p style={{ margin: "16px 0 0" }}>
           <Link className="btn primary" href={claimLink(tool)}>Claim this</Link>
         </p>
+      )}
+
+      {tool.claims.some((c) => c.status === "pending") && (
+        <div style={{ marginTop: 12 }} role="status">
+          <p className="note" style={{ marginTop: 0 }}>A claim on this tool is waiting for a manual review.</p>
+          <ReviewNote />
+        </div>
       )}
 
       <div className="grid2" style={{ marginTop: 24 }}>

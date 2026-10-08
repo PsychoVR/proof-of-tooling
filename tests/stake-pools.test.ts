@@ -34,12 +34,7 @@ type Fx = (typeof accountsFixture.accounts)[number];
 const fx = (id: string): Fx => accountsFixture.accounts.find((a) => a.id === id)!;
 const slice = (id: string) => Buffer.from(fx(id).sliceBase64, "base64");
 
-// Sanctum pools are discovered at runtime; the fixtures use one real pool per program.
-const PROGRAM_POOLS = {
-  [SANCTUM_SPL_PROGRAM]: ["LW3qEdGWdVrxNgxSXW8vZri7Jifg4HuKEQ1UABLxs3C"],
-  [SANCTUM_MULTI_PROGRAM]: ["8VpRhuxa7sUUepdY3kQiTmX9rS5vx4WgaXiAnXq4KCtr"],
-};
-const index = buildAuthorityIndex(STAKE_POOLS, PROGRAM_POOLS);
+const index = buildAuthorityIndex(STAKE_POOLS);
 
 function okFetch(result: unknown, init: { status?: number; headers?: Record<string, string> } = {}): typeof fetch {
   return (async () =>
@@ -90,8 +85,6 @@ describe("registry", () => {
     jpool: "jpool",
     vault: "vault",
     aero: "aero",
-    "sanctum-spl": "sanctum",
-    "sanctum-multi": "sanctum",
     marinade: "marinade",
     "marinade-native": "marinade",
   };
@@ -115,10 +108,29 @@ describe("registry", () => {
     expect(liquid.withdrawer).toBe("9eG63CdHjsfhHmobHgLtESGC8GabbmRcaSpHAZrtmhco");
   });
 
-  it("Sanctum matches nothing until its pools are supplied", () => {
-    const bare = buildAuthorityIndex(STAKE_POOLS);
-    const s = parseStakeSlice(slice("sanctum-multi"))!;
-    expect(attributeStake(s, bare)).toBeNull();
+  // The fixtures "sanctum-spl" and "sanctum-multi" are real accounts of the Sanctum programs, but their pools are
+  // Lantern (LW3q...) and Jupiter (jupSOL, 8VpR...). Hosting a pool on a Sanctum program does not make it Sanctum.
+  it("pools merely hosted on the Sanctum programs are not attributed to Sanctum", () => {
+    expect(poolById("sanctum")?.authorities).toEqual([]);
+    for (const id of ["sanctum-spl", "sanctum-multi"]) {
+      expect(attributeStake(parseStakeSlice(slice(id))!, index)).toBeNull();
+    }
+    expect(SANCTUM_SPL_PROGRAM).toMatch(/^SP12/);
+    expect(SANCTUM_MULTI_PROGRAM).toMatch(/^SPMB/);
+  });
+
+  it("an approved candidate adds its pool to a registry pool by id, and a colliding authority is dropped", () => {
+    const lantern: StakePoolDef = {
+      id: "sanctum",
+      name: "ignored",
+      logo: "/pools/sanctum.png",
+      authorities: [{ kind: "spl-pool", pool: "LW3qEdGWdVrxNgxSXW8vZri7Jifg4HuKEQ1UABLxs3C", program: SANCTUM_SPL_PROGRAM }],
+    };
+    const merged = buildAuthorityIndex(STAKE_POOLS, [lantern]);
+    expect(attributeStake(parseStakeSlice(slice("sanctum-spl"))!, merged)).toBe("sanctum");
+    const clash: StakePoolDef = { ...lantern, id: "other" };
+    const dropped = buildAuthorityIndex(STAKE_POOLS, [lantern, clash]);
+    expect(attributeStake(parseStakeSlice(slice("sanctum-spl"))!, dropped)).toBeNull();
   });
 
   it("does not attribute unknown authorities", () => {

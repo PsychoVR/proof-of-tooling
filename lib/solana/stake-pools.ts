@@ -19,8 +19,6 @@ export const SANCTUM_MULTI_PROGRAM = "SPMBzsVUuoHA4Jm6KunbsotaahvVikZs1JyTW6iJvb
 export type PoolAuthority =
   /** One SPL-style pool: its withdraw authority is PDA([pool, "withdraw"], program). */
   | { kind: "spl-pool"; pool: string; program: string }
-  /** Every pool of a program; the pool addresses come from discovery (see pool-discovery.ts). */
-  | { kind: "spl-program"; program: string }
   /** A fixed address matched against the stake account's withdrawer or staker. */
   | { kind: "address"; address: string; role: "withdrawer" | "staker" };
 
@@ -73,10 +71,11 @@ export const STAKE_POOLS: readonly StakePoolDef[] = [
     id: "sanctum",
     name: "Sanctum",
     logo: "/pools/sanctum.png",
-    authorities: [
-      { kind: "spl-program", program: SANCTUM_SPL_PROGRAM },
-      { kind: "spl-program", program: SANCTUM_MULTI_PROGRAM },
-    ],
+    // No address is registered on purpose. The Infinity (INF) mint is not a stake pool of either Sanctum
+    // program (checked against both on 2026-10-08), and those programs host over 1,600 pools of other brands
+    // (jupSOL, Lantern, hundreds of "(Sanctum Automated)" validator LSTs) that anyone can create. Individual
+    // Sanctum-branded pools enter through approved candidates (pool_candidates) with logo_id "sanctum".
+    authorities: [],
   },
   {
     id: "vault",
@@ -95,25 +94,21 @@ export interface AuthorityIndex {
 
 /**
  * Builds the lookup used to attribute stake accounts.
- * `programPools` maps a program id to the pool addresses discovered for it (needed for "spl-program" entries;
- * without it those entries simply match nothing). An address claimed by two pools is dropped from both rather
- * than attributed to whichever came first.
+ * `extra` holds pools approved at runtime (see pool_candidates); an entry with the id of a static pool adds its
+ * authorities to that pool. An address claimed by two different pools is dropped from both rather than
+ * attributed to whichever came first.
  */
-export function buildAuthorityIndex(
-  pools: readonly StakePoolDef[] = STAKE_POOLS,
-  programPools: Readonly<Record<string, readonly string[]>> = {},
-): AuthorityIndex {
+export function buildAuthorityIndex(pools: readonly StakePoolDef[] = STAKE_POOLS, extra: readonly StakePoolDef[] = []): AuthorityIndex {
   const claims = { withdrawers: new Map<string, Set<string>>(), stakers: new Map<string, Set<string>>() };
   const claim = (side: "withdrawers" | "stakers", address: string, id: string) => {
     const set = claims[side].get(address) ?? new Set<string>();
     set.add(id);
     claims[side].set(address, set);
   };
-  for (const pool of pools) {
+  for (const pool of [...pools, ...extra]) {
     for (const a of pool.authorities) {
       if (a.kind === "address") claim(a.role === "withdrawer" ? "withdrawers" : "stakers", a.address, pool.id);
-      else if (a.kind === "spl-pool") claim("withdrawers", splWithdrawAuthority(a.pool, a.program), pool.id);
-      else for (const addr of programPools[a.program] ?? []) claim("withdrawers", splWithdrawAuthority(addr, a.program), pool.id);
+      else claim("withdrawers", splWithdrawAuthority(a.pool, a.program), pool.id);
     }
   }
   const flatten = (m: Map<string, Set<string>>) => {

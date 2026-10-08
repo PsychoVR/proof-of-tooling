@@ -3,7 +3,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { getDb } from "@/db";
 import { DEV_VALIDATORS as V, resetDevDb, seedDevData } from "@/db/dev-data";
 import { validatorIcons, validators } from "@/db/schema";
-import { defaultIconDeps, runIcons } from "@/jobs/icons";
+import { defaultIconDeps, refreshIconFor, runIcons } from "@/jobs/icons";
 import { getLeaderboard, getValidatorProfile } from "@/lib/queries";
 
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
@@ -22,6 +22,15 @@ afterAll(async () => {
 const setIconUrl = (identity: string, iconUrl: string | null) => getDb().update(validators).set({ iconUrl }).where(eq(validators.identity, identity));
 
 describe("validator icons", () => {
+  it("fetches the icon of one validator on demand from its stored icon url", async () => {
+    await setIconUrl(V.pumpkin.identity, "https://pumpkin.example/i.png");
+    expect(await defaultIconDeps.iconUrlOf(V.pumpkin.identity)).toBe("https://pumpkin.example/i.png");
+    expect(await defaultIconDeps.iconUrlOf(V.quiet.identity)).toBeNull();
+    expect(await refreshIconFor(V.pumpkin.identity, { ...defaultIconDeps, fetchIcon: async () => ({ status: 200, body: PNG }) })).toBe("saved");
+    const [row] = await getDb().select().from(validatorIcons);
+    expect(row.identity).toBe(V.pumpkin.identity);
+  });
+
   it("only verified validators (active claim) with an icon url are fetched", async () => {
     await setIconUrl(V.pumpkin.identity, "https://pumpkin.example/i.png"); // active claims
     await setIconUrl(V.laine.identity, "https://laine.example/i.png"); // stale claim only

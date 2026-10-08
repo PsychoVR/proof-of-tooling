@@ -343,14 +343,24 @@ function ClaimSuccess({ toolName, identity, slug, inReview }: { toolName: string
   const [who, setWho] = useState<{ name: string; iconUrl: string | null } | null>(null);
   useEffect(() => {
     const ctl = new AbortController();
-    fetch(`/api/v1/validators/${encodeURIComponent(identity)}`, { signal: ctl.signal })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((p: { validator?: { name?: string | null; iconUrl?: string | null } } | null) => {
-        const v = p?.validator;
-        if (v?.name) setWho({ name: v.name, iconUrl: v.iconUrl ?? null });
-      })
-      .catch(() => {});
-    return () => ctl.abort();
+    const load = () =>
+      fetch(`/api/v1/validators/${encodeURIComponent(identity)}`, { signal: ctl.signal })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((p: { validator?: { name?: string | null; iconUrl?: string | null } } | null) => {
+          const v = p?.validator;
+          if (v?.name) setWho({ name: v.name, iconUrl: v.iconUrl ?? null });
+          return v?.iconUrl ?? null;
+        })
+        .catch(() => null);
+    // The server downloads the icon in the background right after registering: look again once, a few seconds later.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    void load().then((icon) => {
+      if (!icon && !ctl.signal.aborted) timer = setTimeout(() => void load(), 4000);
+    });
+    return () => {
+      ctl.abort();
+      clearTimeout(timer);
+    };
   }, [identity]);
   return (
     <div className="panel step" role="status">

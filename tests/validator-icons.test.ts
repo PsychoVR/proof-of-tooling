@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { runIcons, type IconDeps, type IconTarget } from "@/jobs/icons";
+import { refreshIconFor, runIcons, type IconDeps, type IconTarget } from "@/jobs/icons";
 import { iconEtag, iconPath, MAX_ICON_BYTES, sniffIconType } from "@/lib/validator-icons";
 import { buildToolsWithClaims, mapValidator, type ValidatorRow } from "@/lib/query-mappers";
 
@@ -43,6 +43,7 @@ function deps(targets: IconTarget[], fetchIcon: IconDeps["fetchIcon"], stored: s
   const remove = vi.fn(async ({ keep, also }: { keep: string[]; also: string[] }) => stored.filter((id) => !keep.includes(id) || also.includes(id)).length);
   const d: IconDeps = {
     targets: async () => targets,
+    iconUrlOf: async (id) => targets.find((x) => x.identity === id)?.iconUrl ?? null,
     fetchIcon,
     save: async (id, icon) => void (saved[id] = { contentType: icon.contentType, etag: icon.etag }),
     remove,
@@ -136,5 +137,29 @@ describe("icon exposure", () => {
       { identity: "B", cluster: "mainnet", name: "Bravo" },
     ]);
     expect(out[0].claimedBy.map((c) => c.iconUrl)).toEqual(["/api/validators/A/icon", null]);
+  });
+});
+
+describe("refreshIconFor (right after a claim becomes active)", () => {
+  it("downloads and stores the icon of that validator", async () => {
+    const { d, saved } = deps([{ identity: "A", iconUrl: "https://a.example/i.png" }], async () => ({ status: 200, body: PNG }));
+    expect(await refreshIconFor("A", d)).toBe("saved");
+    expect(saved.A.contentType).toBe("image/png");
+  });
+
+  it("does nothing for a validator that publishes no icon", async () => {
+    const fetchIcon = vi.fn();
+    const { d } = deps([], fetchIcon);
+    expect(await refreshIconFor("A", d)).toBeNull();
+    expect(fetchIcon).not.toHaveBeenCalled();
+  });
+
+  it("rejects non images and reports network or lookup failures without throwing", async () => {
+    const t = [{ identity: "A", iconUrl: "https://a.example/i" }];
+    expect(await refreshIconFor("A", deps(t, async () => ({ status: 200, body: SVG })).d)).toBe("rejected");
+    expect(await refreshIconFor("A", deps(t, async () => ({ status: 500, body: PNG })).d)).toBe("failed");
+    expect(await refreshIconFor("A", deps(t, async () => { throw new Error("timeout"); }).d)).toBe("failed");
+    const broken = { ...deps(t, async () => ({ status: 200, body: PNG })).d, iconUrlOf: async () => { throw new Error("db down"); } };
+    expect(await refreshIconFor("A", broken)).toBeNull();
   });
 });

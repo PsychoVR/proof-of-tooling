@@ -17,6 +17,8 @@ export interface IconTarget {
 export interface IconDeps {
   /** Verified validators (with an active claim) that publish an icon url, least recently fetched first. */
   targets: () => Promise<IconTarget[]>;
+  /** The icon url the validator publishes on chain, if any. */
+  iconUrlOf: (identity: string) => Promise<string | null>;
   fetchIcon: (url: string) => Promise<{ status: number; body: Buffer }>;
   save: (identity: string, icon: { contentType: IconType; bytes: Buffer; etag: string }) => Promise<void>;
   /** Drops stored icons of identities that are no longer targets, plus the given ones. Returns how many rows went. */
@@ -58,6 +60,14 @@ export const defaultIconDeps: IconDeps = {
     }
     return out;
   },
+  async iconUrlOf(identity) {
+    const rows = await db()
+      .select({ iconUrl: validators.iconUrl })
+      .from(validators)
+      .where(and(eq(validators.identity, identity), inArray(validators.cluster, [...ENABLED_CLUSTERS]), isNotNull(validators.iconUrl)))
+      .limit(1);
+    return rows[0]?.iconUrl ?? null;
+  },
   fetchIcon: createSafeBinaryFetcher({ maxBytes: MAX_ICON_BYTES, timeoutMs: 5000, maxRedirects: 3 }),
   async save(identity, icon) {
     await db()
@@ -78,6 +88,40 @@ export const defaultIconDeps: IconDeps = {
   },
 };
 
+export type IconOutcome = "saved" | "rejected" | "failed";
+
+/**
+ * Downloads one icon and stores it. The url is third-party input: it goes through the safe fetcher
+ * (https, public addresses, few redirects, 5 s, 500 KB) and the bytes must be a raster image,
+ * whatever the server says they are. Shared by the daily job and the claim flow.
+ */
+export async function refreshIcon(t: IconTarget, deps: Pick<IconDeps, "fetchIcon" | "save">): Promise<IconOutcome> {
+  try {
+    const res = await deps.fetchIcon(t.iconUrl);
+    if (res.status !== 200) return "failed";
+    const type = res.body.length > 0 ? sniffIconType(res.body) : null;
+    if (!type) return "rejected";
+    await deps.save(t.identity, { contentType: type, bytes: res.body, etag: iconEtag(res.body) });
+    return "saved";
+  } catch {
+    return "failed";
+  }
+}
+
+/**
+ * Fetches the icon of one validator right after its claim becomes active, so it shows on the
+ * success screen and the tool page without waiting for the daily job. Never throws and never
+ * blocks the caller: call it without awaiting.
+ */
+export async function refreshIconFor(identity: string, deps: IconDeps = defaultIconDeps): Promise<IconOutcome | null> {
+  try {
+    const iconUrl = await deps.iconUrlOf(identity);
+    return iconUrl ? await refreshIcon({ identity, iconUrl }, deps) : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Downloads the on-chain icon of every verified validator and keeps it in the database. The url is
  * third-party input: it goes through the safe fetcher (https, public addresses, few redirects,
@@ -93,21 +137,9 @@ export async function runIcons(deps: IconDeps = defaultIconDeps): Promise<IconRe
   const worker = async () => {
     while (next < batch.length) {
       const t = batch[next++];
-      try {
-        const res = await deps.fetchIcon(t.iconUrl);
-        const type = res.status === 200 && res.body.length > 0 ? sniffIconType(res.body) : null;
-        if (res.status !== 200) {
-          report.failed++;
-        } else if (!type) {
-          report.rejected++;
-          rejected.push(t.identity);
-        } else {
-          await deps.save(t.identity, { contentType: type, bytes: res.body, etag: iconEtag(res.body) });
-          report.saved++;
-        }
-      } catch {
-        report.failed++;
-      }
+      const outcome = await refreshIcon(t, deps);
+      report[outcome]++;
+      if (outcome === "rejected") rejected.push(t.identity);
     }
   };
   await Promise.all(Array.from({ length: Math.min(POOL, batch.length) }, worker));

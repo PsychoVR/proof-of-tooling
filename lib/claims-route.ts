@@ -9,6 +9,7 @@ import { getClientIp } from "@/lib/client-ip";
 import { failureReason, INTERNAL_REASON } from "@/lib/claim-failures";
 import { enforceIpLimits, logWouldBlock } from "@/lib/ip-limit-mode";
 import { getToolSlugById } from "@/lib/queries";
+import { refreshIconFor } from "@/jobs/icons";
 import { parseClaimMessage, verifyClaimSignature } from "@/lib/claims";
 
 const bodySchema = z.object({

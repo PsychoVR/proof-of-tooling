@@ -19,6 +19,7 @@ import {
   buildAuthorityIndex,
   SANCTUM_MULTI_PROGRAM,
   SANCTUM_SPL_PROGRAM,
+  REGISTRY_VERSION,
   SPL_STAKE_POOL_PROGRAM,
   STAKE_POOLS,
   type StakePoolDef,
@@ -148,6 +149,8 @@ export interface RunOptions {
 const MEASURE_EXTRA_MS = 30_000;
 
 const SFDP_RUN = "sfdp";
+/** job_runs row stamped the first time a run sees this registry version; scans older than it are stale. */
+export const REGISTRY_RUN = `registry-v${REGISTRY_VERSION}`;
 const DISCOVERY_RUN = "pool-discovery";
 
 const emptyReport = (mode: PoolsMode, verified: number): PoolsReport => ({
@@ -181,8 +184,19 @@ const isDue = async (deps: PoolsDeps, name: string, every: number) => {
 export async function runPools(deps: PoolsDeps = defaultPoolsDeps, opts: RunOptions = {}): Promise<PoolsReport> {
   const started = Date.now();
   const budgetMs = opts.budgetMs ?? RUN_BUDGET_MS;
-  const all = await deps.targets();
+  const stored = await deps.targets();
   const now = deps.now();
+
+  // A new registry version means authorities that older scans never looked for. The first run that sees it stamps
+  // the time; every validator scanned before that stamp counts as never scanned (so it is due at once, ahead of the
+  // rescan guard and its weekly slot) until a scan after the stamp replaces it. Cheap and needs no migration.
+  let since = await deps.lastRun(REGISTRY_RUN);
+  if (!since) {
+    await deps.markRun(REGISTRY_RUN);
+    since = now;
+  }
+  const staleBefore = since.getTime();
+  const all = stored.map((t) => (t.scannedAt && t.scannedAt.getTime() < staleBefore ? { ...t, scannedAt: null } : t));
 
   let mode = modeFor(all.length);
   let due: PoolTarget[];

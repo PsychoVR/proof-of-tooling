@@ -8,7 +8,11 @@ import { splWithdrawAuthority } from "./pda";
  * tests/fixtures/stake-pools/stake-accounts.json and are asserted in tests/stake-pools.test.ts.
  * A new entry needs the same proof; names and logos are curated here, never read from the chain.
  */
-export const REGISTRY_VERSION = 1;
+/**
+ * Bump whenever an entry or authority is added or changed: the pools job rescans every verified validator once per
+ * version (see runPools), so new authorities show up without waiting for the weekly rotation.
+ */
+export const REGISTRY_VERSION = 2;
 
 export const SPL_STAKE_POOL_PROGRAM = "SPoo1Ku8WFXoNDMHPsrGSTSG1Y47rzgn41SLUNakuHy";
 /** Sanctum fork of the SPL stake pool program (single-validator LSTs). */
@@ -89,6 +93,21 @@ export const STAKE_POOLS: readonly StakePoolDef[] = [
     // (jupSOL, Lantern, hundreds of "(Sanctum Automated)" validator LSTs) that anyone can create. Individual
     // Sanctum-branded pools enter through approved candidates (pool_candidates) with logo_id "sanctum".
     authorities: [],
+  },
+  {
+    // Solana Foundation Delegation Program (SFDP). The Foundation delegates from stake accounts whose staker is
+    // mpa4abUkjQoAvPzREkh5Mo75hZhPFQ2FSH6w7dWKuQ5 and whose withdrawer is one of two Foundation addresses: the base
+    // delegation (4ZJhPQ...) and a second, smaller one (BVPWEK...). Both were seen on the SFDP-approved validators
+    // EN5F2B... (SunshineVR), 3YX7PQ..., CZanBz..., hnhCMm... and BR1aTt... on 2026-10-09 (epoch 1052): base 45,814-57,794 SOL
+    // and second 233-294 SOL each (tests/fixtures/stake-pools/stake-accounts.json, foundationChecks). They are registered
+    // by withdrawer only: the staker key also appears with unrelated withdrawers, and the withdrawer wins anyway.
+    id: "solana-foundation",
+    name: "Solana Foundation",
+    logo: "/pools/solana-foundation.svg",
+    authorities: [
+      { kind: "address", address: "4ZJhPQAgUseCsWhKvJLTmmRRUV74fdoTpQLNfKoekbPY", role: "withdrawer" },
+      { kind: "address", address: "BVPWEKqzHD4H2pAX34wbtn33eNpzx6KxHxuaJW7uKZei", role: "withdrawer" },
+    ],
   },
   {
     id: "vault",

@@ -10,7 +10,7 @@ import { getValidatorProfile } from "@/lib/queries";
 import { pageMetadata } from "@/lib/seo";
 import { parseIdentityParam } from "@/lib/ui/params";
 import { MULTI_CLUSTER } from "@/lib/clusters";
-import { CLUSTER_LABEL, displayName, formatDate, formatStake, safeHttpUrl, shortKey, toolPillStatus } from "@/lib/ui/format";
+import { CLUSTER_LABEL, displayName, formatDate, formatStake, safeHttpUrl, shortKey, showSfdpLabel, toolPillStatus } from "@/lib/ui/format";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +34,8 @@ export default async function ValidatorPage({ params }: Props) {
   const profile = id ? await getValidatorProfile(id) : null; // not a public key: 404 without touching the database
   if (!profile) notFound();
   const { validator: v, tools, endorsements, pools, sfdp } = profile;
-  const hasBadges = (pools?.length ?? 0) > 0 || sfdp?.participant === true;
+  const sfdpLabel = showSfdpLabel(pools, sfdp);
+  const hasBadges = (pools?.length ?? 0) > 0 || sfdpLabel;
   const name = displayName(v);
   const site = safeHttpUrl(v.website);
   const badge = `[![Proof of Tooling](https://tooling.sunshinevr.io/badge/${v.identity}.svg)](https://tooling.sunshinevr.io/v/${v.identity})`;
@@ -57,7 +58,7 @@ export default async function ValidatorPage({ params }: Props) {
           {(pools?.length ?? 0) > 0 && <h2 className="label">Stake pools</h2>}
           <div className="pool-row">
             <PoolBadges pools={pools} chip />
-            <SfdpBadge participant={sfdp?.participant} />
+            <SfdpBadge participant={sfdpLabel} />
           </div>
         </section>
       )}

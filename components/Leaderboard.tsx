@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { ENABLED_CLUSTERS, MULTI_CLUSTER } from "@/lib/clusters";
 import { CATEGORIES, type Category, type Cluster, type LeaderboardRow, type ToolWithClaims } from "@/lib/types";
 import { claimLink } from "@/lib/ui/claim";
-import { CLUSTER_LABEL, displayName, safeHttpUrl, shortKey } from "@/lib/ui/format";
+import { CLUSTER_LABEL, displayName, safeHttpUrl, shortKey, showSfdpLabel } from "@/lib/ui/format";
 import { Avatar } from "./Avatar";
 import { PoolBadges, SfdpBadge } from "./PoolBadge";
 import { StatusPill } from "./StatusPill";
@@ -166,10 +166,10 @@ export function Leaderboard({ rows, unclaimed }: { rows: LeaderboardRow[]; uncla
                               </>
                             )}
                           </div>
-                          {(r.pools?.length || r.sfdp?.participant) ? (
+                          {(r.pools?.length || showSfdpLabel(r.pools, r.sfdp)) ? (
                             <div className="pool-row">
                               <PoolBadges pools={r.pools} max={3} />
-                              <SfdpBadge participant={r.sfdp?.participant} compact />
+                              <SfdpBadge participant={showSfdpLabel(r.pools, r.sfdp)} compact />
                             </div>
                           ) : null}
                         </div>

@@ -66,3 +66,14 @@ export function formatPoolLabel(name: string, sol: number): string {
 export function splitPools<T>(pools: readonly T[], max: number): { shown: T[]; hidden: T[] } {
   return { shown: pools.slice(0, max), hidden: pools.slice(max) };
 }
+
+/** Registry id of the Solana Foundation entry (see lib/solana/stake-pools.ts). */
+export const FOUNDATION_POOL_ID = "solana-foundation";
+
+/**
+ * The "SFDP participant" label shows only for an Approved participant that has no active Foundation delegation
+ * above the threshold: when it has one, the Foundation stake badge says more and replaces the label.
+ */
+export function showSfdpLabel(pools: readonly { id: string }[] | undefined, sfdp: { participant: boolean } | null | undefined): boolean {
+  return sfdp?.participant === true && !(pools ?? []).some((p) => p.id === FOUNDATION_POOL_ID);
+}

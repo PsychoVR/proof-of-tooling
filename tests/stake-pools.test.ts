@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import accountsFixture from "./fixtures/stake-pools/stake-accounts.json";
 import poolsFixture from "./fixtures/stake-pools/spl-pools.json";
 import sfdpFixture from "./fixtures/stake-pools/sfdp-participants.json";
+import { formatPoolLabel, showSfdpLabel } from "@/lib/ui/format";
 import { approvedToPools, poolMetaMap } from "@/lib/pool-registry";
 import { findProgramAddress, isOnCurve, splWithdrawAuthority } from "@/lib/solana/pda";
 import {
@@ -96,6 +97,8 @@ describe("registry", () => {
     vault: "vault",
     marinade: "marinade",
     "marinade-native": "marinade",
+    "solana-foundation-base": "solana-foundation",
+    "solana-foundation-matching": "solana-foundation",
   };
   for (const [fixtureId, poolId] of Object.entries(expected)) {
     it(`attributes the real ${fixtureId} stake account to ${poolId}`, () => {
@@ -169,6 +172,88 @@ describe("registry", () => {
     const idx = buildAuthorityIndex([a, b]);
     expect(idx.withdrawers.has("X")).toBe(false);
     expect(idx.stakers.get("Y")).toBe("b");
+  });
+});
+
+describe("Solana Foundation (SFDP) delegations", () => {
+  const FOUNDATION_STAKER = "mpa4abUkjQoAvPzREkh5Mo75hZhPFQ2FSH6w7dWKuQ5";
+  const BASE = "4ZJhPQAgUseCsWhKvJLTmmRRUV74fdoTpQLNfKoekbPY";
+  const MATCHING = "BVPWEKqzHD4H2pAX34wbtn33eNpzx6KxHxuaJW7uKZei";
+
+  it("has two real stake accounts of SunshineVR, one per Foundation withdrawer, with the same staker", () => {
+    const base = parseStakeSlice(slice("solana-foundation-base"))!;
+    const matching = parseStakeSlice(slice("solana-foundation-matching"))!;
+    expect(base).toMatchObject({ staker: FOUNDATION_STAKER, withdrawer: BASE, voter: "9ymU1ayh9mZVyDL4dUUtXKtX1wCaFNzZPGutLJgqzuC1", lamports: 57_794_146_810_782n });
+    expect(matching).toMatchObject({ staker: FOUNDATION_STAKER, withdrawer: MATCHING, voter: base.voter, lamports: 294_671_443_789n });
+    expect(fx("solana-foundation-base").account).toBe("6kU7k6iMRAuzqdUDJUFs4hmFzG93QgMcodzq6WUpvzvh");
+    expect(isActiveStake(base, EPOCH)).toBe(true);
+    expect(isActiveStake(matching, EPOCH)).toBe(true);
+  });
+
+  it("registers both withdrawers and not the shared staker, so each one is matched by withdrawer", () => {
+    expect(index.withdrawers.get(BASE)).toBe("solana-foundation");
+    expect(index.withdrawers.get(MATCHING)).toBe("solana-foundation");
+    expect(index.stakers.has(FOUNDATION_STAKER)).toBe(false);
+  });
+
+  it("was confirmed on other SFDP-approved validators with both withdrawers (numbers recorded in the fixture)", () => {
+    const checks = (accountsFixture as unknown as { foundationChecks: { validators: { identity: string; vote: string; baseSol: number; matchingSol?: number }[] } }).foundationChecks;
+    expect(checks.validators.length).toBeGreaterThanOrEqual(3);
+    expect(new Set(checks.validators.map((v) => v.identity)).size).toBe(checks.validators.length);
+    for (const v of checks.validators) expect(v.baseSol).toBeGreaterThan(100);
+    expect(checks.validators.filter((v) => (v.matchingSol ?? 0) > 0).length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("none of its authorities is used by a pool of the registry", () => {
+    for (const p of STAKE_POOLS.filter((x) => x.id !== "solana-foundation")) {
+      for (const a of p.authorities) if (a.kind === "address") expect([BASE, MATCHING, FOUNDATION_STAKER]).not.toContain(a.address);
+    }
+    expect(index.withdrawers.get(splWithdrawAuthority("Jito4APyf642JPZPx3hGc6WWJ8zPKtRbRs4P815Awbb", SPL_STAKE_POOL_PROGRAM))).toBe("jito");
+  });
+
+  it("sums both delegations and lists the Foundation by SOL next to the pools", () => {
+    const totals = aggregatePoolStake([slice("solana-foundation-base"), slice("solana-foundation-matching"), slice("jito")], index, EPOCH);
+    expect(totals.get("solana-foundation")).toBe(57_794_146_810_782n + 294_671_443_789n);
+    const picked = selectPools(totals);
+    expect(picked.map((p) => p.poolId)).toEqual(["solana-foundation", "jito"]);
+  });
+
+  it("applies the 100 SOL active threshold and ignores inactive Foundation stake", () => {
+    const small = new Map([["solana-foundation", 99_999_999_999n]]);
+    expect(selectPools(small)).toEqual([]);
+    expect(selectPools(new Map([["solana-foundation", MIN_POOL_LAMPORTS]]))).toHaveLength(1);
+    const dead = Buffer.from(slice("solana-foundation-base"));
+    dead.writeBigUInt64LE(EPOCH - 1 > 0 ? BigInt(EPOCH - 1) : 0n, 160); // deactivated: no longer active
+    expect(aggregatePoolStake([dead], index, EPOCH).size).toBe(0);
+  });
+
+  it("the withdrawer wins over the staker, and an authority claimed by two entries is dropped", () => {
+    const base = parseStakeSlice(slice("solana-foundation-base"))!;
+    const other: StakePoolDef = { id: "other", name: "Other", logo: "/pools/other.png", authorities: [{ kind: "address", address: FOUNDATION_STAKER, role: "staker" }] };
+    const withStaker = buildAuthorityIndex(STAKE_POOLS, [other]);
+    expect(attributeStake(base, withStaker)).toBe("solana-foundation"); // withdrawer first
+    const clash: StakePoolDef = { id: "clash", name: "Clash", logo: "/pools/clash.png", authorities: [{ kind: "address", address: BASE, role: "withdrawer" }] };
+    const dropped = buildAuthorityIndex(STAKE_POOLS, [clash]);
+    expect(dropped.withdrawers.has(BASE)).toBe(false);
+    expect(attributeStake(base, dropped)).toBeNull();
+    expect(dropped.withdrawers.get(MATCHING)).toBe("solana-foundation");
+  });
+
+  it("has a name, a logo of the repo and a hover label like every pool", () => {
+    const meta = poolMetaMap([]).get("solana-foundation")!;
+    expect(meta).toEqual({ name: "Solana Foundation", logo: "/pools/solana-foundation.svg" });
+    expect(formatPoolLabel(meta.name, 57_794)).toBe("Solana Foundation · 57,794 SOL delegated");
+  });
+
+  it("the SFDP label gives way to the Foundation badge but stays otherwise", () => {
+    const sfdp = { participant: true };
+    expect(showSfdpLabel([], sfdp)).toBe(true);
+    expect(showSfdpLabel(undefined, sfdp)).toBe(true);
+    expect(showSfdpLabel([{ id: "jito" }], sfdp)).toBe(true);
+    expect(showSfdpLabel([{ id: "jito" }, { id: "solana-foundation" }], sfdp)).toBe(false);
+    expect(showSfdpLabel([], { participant: false })).toBe(false);
+    expect(showSfdpLabel([], null)).toBe(false);
+    expect(showSfdpLabel([], undefined)).toBe(false);
   });
 });
 

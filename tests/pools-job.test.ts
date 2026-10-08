@@ -6,6 +6,7 @@ import {
   MAX_PER_RUN,
   modeFor,
   refreshPoolsFor,
+  REGISTRY_RUN,
   runPools,
   selectDue,
   slotOf,
@@ -97,7 +98,8 @@ describe("scheduling", () => {
 
 function makeDeps(over: Partial<PoolsDeps> = {}, t: PoolTarget[] = targets(3)) {
   const saved: { identity: string; pools: string[]; epoch: number }[] = [];
-  const runs = new Map<string, Date>();
+  // The current registry version was already seen a month ago, so only the tests about a new version see stale scans.
+  const runs = new Map<string, Date>([[REGISTRY_RUN, new Date(NOW.getTime() - 30 * 24 * H)]]);
   const deps: PoolsDeps = {
     now: () => NOW,
     targets: async () => t,
@@ -130,6 +132,50 @@ const cand = (pool: string, program = "SPoo1Ku8WFXoNDMHPsrGSTSG1Y47rzgn41SLUNaku
   totalLamports: totalSol === null ? null : BigInt(totalSol) * SOL,
 });
 const QUALIFIES = { validators: 12, stakeLamports: 15_000n * SOL, mintName: "Some SOL" };
+
+describe("registry version rescans", () => {
+  it("the first run of a new registry version scans everyone again, even scans from two hours ago, and stamps the version", async () => {
+    const t = targets(3, ago(2 * H));
+    const { deps, saved, runs } = makeDeps({}, t);
+    runs.delete(REGISTRY_RUN);
+    const r = await runPools(deps);
+    expect(r.scanned).toBe(3);
+    expect(saved.map((x) => x.identity).sort()).toEqual(t.map((x) => x.identity).sort());
+    expect(runs.get(REGISTRY_RUN)).toEqual(NOW);
+  });
+
+  it("weekly mode also drops the slot rule and the cap keeps the rest for the next run", async () => {
+    const t = targets(70, ago(2 * H));
+    const { deps, saved, runs } = makeDeps({}, t);
+    runs.delete(REGISTRY_RUN);
+    const r = await runPools(deps);
+    expect(r.mode).toBe("weekly");
+    expect(r.scanned).toBe(MAX_PER_RUN);
+    expect(r.deferred).toBe(0);
+    expect(saved).toHaveLength(MAX_PER_RUN);
+  });
+
+  it("scans made before the stamp are stale, scans after it are not, and a stamped version changes nothing", async () => {
+    const t = targets(3);
+    t[0].scannedAt = ago(5 * H); // before the stamp
+    t[1].scannedAt = ago(1 * H); // after it
+    t[2].scannedAt = ago(1 * H);
+    const { deps, saved, runs } = makeDeps({}, t);
+    runs.set(REGISTRY_RUN, ago(3 * H));
+    await runPools(deps);
+    expect(saved.map((x) => x.identity)).toEqual([t[0].identity]);
+    expect(runs.get(REGISTRY_RUN)).toEqual(ago(3 * H));
+  });
+
+  it("refreshPoolsFor stamps the version and scans only that validator", async () => {
+    const t = targets(2, ago(2 * H));
+    const { deps, saved, runs } = makeDeps({}, t);
+    runs.delete(REGISTRY_RUN);
+    expect(await refreshPoolsFor(t[1].identity, deps)).toMatchObject({ due: 1, scanned: 1 });
+    expect(saved.map((x) => x.identity)).toEqual([t[1].identity]);
+    expect(runs.has(REGISTRY_RUN)).toBe(true);
+  });
+});
 
 describe("runPools", () => {
   it("scans due validators, records them, and runs discovery and SFDP when due", async () => {

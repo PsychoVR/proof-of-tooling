@@ -29,10 +29,70 @@ test.describe("stake pool badges", () => {
     c.expectClean();
   });
 
+  test("the Solana Foundation badge replaces the SFDP label, on the profile and on the home row", async ({ page }) => {
+    // Overclock is an Approved SFDP participant with 4,000 SOL from the Foundation: only the stake badge shows.
+    await gotoHydrated(page, `/v/${V.overclock.identity}`);
+    const section = page.getByRole("region", { name: "Stake pools and programs" });
+    const badges = section.locator(".pool-badge");
+    await expect(badges).toHaveCount(2);
+    await expect(badges.nth(0)).toHaveAttribute("aria-label", "Solana Foundation · 4,000 SOL delegated");
+    await expect(badges.nth(0)).toHaveAttribute("title", "Solana Foundation · 4,000 SOL delegated");
+    await expect(badges.nth(0).locator(".pool-name")).toHaveText("Solana Foundation");
+    await expect(badges.nth(1)).toHaveAttribute("aria-label", "Jito · 250 SOL delegated");
+    await expect(page.getByLabel("SFDP participant")).toHaveCount(0);
+    await badges.nth(0).hover();
+    await expect(page.locator(".pool-tip")).toHaveText("Solana Foundation · 4,000 SOL delegated");
+
+    await gotoHydrated(page, "/");
+    const row = page.locator("tbody tr", { hasText: "Overclock" });
+    await expect(row.locator(".pool-badge")).toHaveCount(2);
+    await expect(row.locator(".pool-badge").first()).toHaveAttribute("aria-label", "Solana Foundation · 4,000 SOL delegated");
+    await expect(row.getByLabel("SFDP participant")).toHaveCount(0);
+  });
+
+  test("SFDP participant is a chip of its own, apart from the last pool badge", async ({ page }) => {
+    await gotoHydrated(page, `/v/${V.pumpkin.identity}`);
+    const sfdp = page.locator(".pool-badge.sfdp");
+    await expect(sfdp).toHaveCount(1);
+    await expect(sfdp).toHaveClass(/chip/);
+    const last = page.locator(".pool-badge:not(.sfdp)").last();
+    const [a, b] = [await last.boundingBox(), await sfdp.boundingBox()];
+    const gap = b!.y > a!.y + a!.height - 2 ? 99 : b!.x - (a!.x + a!.width); // wrapped to the next line, or beside it
+    expect(gap).toBeGreaterThanOrEqual(4);
+    const styles = await sfdp.evaluate((el) => {
+      const c = getComputedStyle(el);
+      return { border: c.borderTopWidth, radius: c.borderTopLeftRadius, bg: c.backgroundColor };
+    });
+    expect(styles.border).toBe("1px");
+    expect(parseFloat(styles.radius)).toBeGreaterThan(10);
+    expect(styles.bg).not.toBe("rgba(0, 0, 0, 0)");
+    await gotoHydrated(page, "/");
+    const row = page.locator("tbody tr", { hasText: "Pumpkin" });
+    await expect(row.locator(".pool-badge.sfdp.chip")).toHaveText("SFDP");
+  });
+
+  test("every badge carries its SOL label in the server-rendered HTML, with no script needed", async ({ request }) => {
+    // The label is data, not state: title and aria-label must be in the HTML a crawler or a no-JS browser gets.
+    for (const path of [`/v/${V.pumpkin.identity}`, "/"]) {
+      const html = await (await request.get(path)).text();
+      const badges = [...html.matchAll(/<span[^>]*class="pool-badge[^"]*"[^>]*>/g)].map((m) => m[0]).filter((t) => !t.includes("pool-badge sfdp"));
+      expect(badges.length, path).toBeGreaterThan(0);
+      for (const tag of badges) {
+        expect(tag, path).toMatch(/aria-label="[^"]*SOL delegated/);
+        expect(tag, path).toMatch(/title="[^"]*SOL delegated/);
+      }
+    }
+    const profile = await (await request.get(`/v/${V.overclock.identity}`)).text();
+    expect(profile).toContain("Solana Foundation · 4,000 SOL delegated");
+    expect(profile).not.toContain("SFDP participant");
+  });
+
   test("profile with one pool and no SFDP, and profile with neither, show no empty block", async ({ page }) => {
+    await page.goto(`/v/${V.quiet.identity}`);
+    await expect(page.locator(".pool-section")).toHaveCount(0);
     await page.goto(`/v/${V.overclock.identity}`);
     const section = page.getByRole("region", { name: "Stake pools and programs" });
-    await expect(section.locator(".pool-badge")).toHaveCount(1);
+    await expect(section.locator(".pool-badge")).toHaveCount(2);
     await expect(page.getByLabel("SFDP participant")).toHaveCount(0);
     await page.goto(`/v/${V.validBlocks.identity}`);
     await expect(page.getByRole("heading", { name: V.validBlocks.name })).toBeVisible();
@@ -58,10 +118,10 @@ test.describe("stake pool badges", () => {
     await more.focus();
     await expect(page.locator(".pool-tip")).toContainText("The Vault");
     const other = page.locator("tbody tr", { hasText: "Overclock" });
-    await expect(other.locator(".pool-badge")).toHaveCount(1);
+    await expect(other.locator(".pool-badge")).toHaveCount(2);
     await expect(other.locator(".pool-badge.more")).toHaveCount(0);
     for (const src of await page.locator(".pool-ico img").evaluateAll((els) => els.map((e) => e.getAttribute("src") ?? ""))) {
-      expect(src).toMatch(/^\/pools\/[a-z]+\.(png|svg)$/);
+      expect(src).toMatch(/^\/pools\/[a-z-]+\.(png|svg)$/);
     }
     expect(foreign).toEqual([]);
   });

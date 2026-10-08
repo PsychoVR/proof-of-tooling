@@ -80,7 +80,7 @@ export async function seedDevData(db: Db = getDb()) {
   // Pumpkin's Pool has a stored on-chain icon (a 1x1 PNG); the other validators fall back to their initial.
   await db.insert(validatorIcons).values({ identity: DEV_VALIDATORS.pumpkin.identity, contentType: "image/png", bytes: DEV_ICON, etag: iconEtag(DEV_ICON) });
 
-  // Stake pools and SFDP: Pumpkin's Pool has five pools (the home row shows three plus "+2"), Overclock one.
+  // Stake pools and SFDP: Pumpkin's Pool has five pools (the home row shows three plus "+2"), Overclock two (Jito and the Solana Foundation, so its SFDP label is replaced by the stake badge).
   const sol = (n: number) => BigInt(n) * BigInt(1_000_000_000);
   await db.insert(validatorPoolStake).values([
     { identity: DEV_VALIDATORS.pumpkin.identity, poolId: "jito", lamports: sol(12_000) },
@@ -89,6 +89,7 @@ export async function seedDevData(db: Db = getDb()) {
     { identity: DEV_VALIDATORS.pumpkin.identity, poolId: "jpool", lamports: sol(300) },
     { identity: DEV_VALIDATORS.pumpkin.identity, poolId: "vault", lamports: sol(150) },
     { identity: DEV_VALIDATORS.overclock.identity, poolId: "jito", lamports: sol(250) },
+    { identity: DEV_VALIDATORS.overclock.identity, poolId: "solana-foundation", lamports: sol(4_000) },
   ]);
   await db.insert(validatorPoolScan).values([
     { identity: DEV_VALIDATORS.pumpkin.identity, epoch: 1052 },
@@ -103,7 +104,7 @@ export async function seedDevData(db: Db = getDb()) {
   const checked = new Date("2026-10-07T04:00:00Z");
   await db.insert(validatorSfdp).values([
     { identity: DEV_VALIDATORS.pumpkin.identity, participant: true, checkedAt: checked, lastOkAt: checked },
-    { identity: DEV_VALIDATORS.overclock.identity, participant: false, checkedAt: checked, lastOkAt: checked },
+    { identity: DEV_VALIDATORS.overclock.identity, participant: true, checkedAt: checked, lastOkAt: checked },
   ]);
 
   await db.insert(endorsements).values({ toolId: await idOf(mithril), identity: DEV_VALIDATORS.pumpkin.identity, message: "proof-of-tooling v1 | endorse", signature: SIG });

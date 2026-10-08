@@ -22,7 +22,7 @@ const solOf = (id: string) => Number((BigInt(accountsFixture.accounts.find((a) =
 // Which stake accounts the simulated RPC returns per vote account.
 const BY_VOTE: Record<string, string[]> = {
   [V.pumpkin.vote]: ["jito", "marinade", "blazestake", "deactivated"],
-  [V.overclock.vote]: ["jito", "deactivating"],
+  [V.overclock.vote]: ["jito", "deactivating", "solana-foundation-base", "solana-foundation-matching"],
 };
 
 function rpcFetch(byVote: Record<string, string[]> = BY_VOTE, opts: { failFor?: string[] } = {}): typeof fetch {
@@ -51,7 +51,7 @@ function deps(f: typeof fetch, over: Partial<PoolsDeps> = {}): PoolsDeps {
     epoch: () => fetchEpoch(o),
     scan: (vote, index, epoch) => fetchValidatorPools(vote, index, epoch, o),
     discover: (program) => discoverStakePools(program, o),
-    fetchSfdp: async (ids) => new Set(ids.filter((i) => i === V.pumpkin.identity)),
+    fetchSfdp: async (ids) => new Set(ids.filter((i) => i === V.pumpkin.identity || i === V.overclock.identity)),
     ...over,
   };
 }
@@ -83,7 +83,7 @@ describe("pools job against the database (simulated RPC)", () => {
     // pumpkin and overclock have active claims; laine is stale, blockLogic pending, the rest have none
     expect(r).toMatchObject({ mode: "daily", verified: 2, due: 2, scanned: 2, failed: 0, withPools: 2 });
     expect((await stored(V.pumpkin.identity)).map(([p]) => p)).toEqual(["blazestake", "jito", "marinade"]);
-    expect((await stored(V.overclock.identity)).map(([p]) => p)).toEqual(["jito"]);
+    expect((await stored(V.overclock.identity)).map(([p]) => p)).toEqual(["jito", "solana-foundation"]);
     expect(await getDb().select().from(validatorPoolScan)).toHaveLength(2);
     expect(await stored(V.laine.identity)).toEqual([]);
     // a second run right away scans nobody (20 h guard)
@@ -102,8 +102,9 @@ describe("pools job against the database (simulated RPC)", () => {
     const pumpkin = board.items.find((r) => r.validator.identity === V.pumpkin.identity)!;
     const overclock = board.items.find((r) => r.validator.identity === V.overclock.identity)!;
     expect(pumpkin.pools!.map((p) => p.id)).toEqual(["jito", "marinade", "blazestake"]);
-    expect(overclock.pools!.map((p) => p.id)).toEqual(["jito"]);
-    expect(overclock.sfdp).toMatchObject({ participant: false });
+    expect(overclock.pools!.map((p) => p.id)).toEqual(["solana-foundation", "jito"]);
+    expect(overclock.pools![0]).toEqual({ id: "solana-foundation", name: "Solana Foundation", logo: "/pools/solana-foundation.svg", sol: solOf("solana-foundation-base") + solOf("solana-foundation-matching") });
+    expect(overclock.sfdp).toMatchObject({ participant: true }); // data keeps it; the UI swaps the label for the stake badge
     // stale and pending claims show nothing, even if rows were left behind
     await getDb().insert(validatorPoolStake).values([
       { identity: V.laine.identity, poolId: "jito", lamports: 900_000_000_000n },

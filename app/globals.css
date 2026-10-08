@@ -260,7 +260,7 @@ footer.site .by img { border-radius: 6px; display: block; }
 .pool-ico { width: 24px; height: 24px; border-radius: 50%; background: #fff; border: 1px solid var(--line); display: inline-flex; align-items: center; justify-content: center; overflow: hidden; flex: none; font-size: 12px; font-weight: 700; color: #16201d; }
 .pool-ico img { width: 18px; height: 18px; object-fit: contain; display: block; }
 .pool-badge.chip { padding: 0 10px 0 0; background: var(--surface-2); border: 1px solid var(--line); font-size: 13px; }
-.pool-badge.sfdp.chip { padding: 0 10px; font-size: 12px; font-weight: 600; border-color: var(--accent-text); color: var(--fg); }
+.pool-badge.sfdp.chip { padding: 0 10px; font-size: 12px; font-weight: 600; background: var(--surface-2); border: 1px solid var(--accent-text); color: var(--fg); white-space: nowrap; }
 .pool-badge.more { padding: 0 8px; font-size: 12px; font-weight: 600; color: var(--muted); border: 1px solid var(--line); background: var(--surface-2); }
 .pool-badge:hover, .pool-badge:focus-visible { border-color: var(--accent-text); }
 .pool-tip { position: fixed; transform: translate(-50%, calc(-100% - 8px)); z-index: 50; max-width: 220px; width: max-content; padding: 6px 9px; border-radius: 6px; background: var(--fg); color: var(--bg); font-size: 12px; font-weight: 500; line-height: 1.35; text-align: left; white-space: normal; pointer-events: none; box-shadow: 0 2px 10px rgba(0,0,0,.3); }

@@ -133,6 +133,72 @@
       "activation": "779",
       "deactivation": "1052",
       "sliceBase64": "poITjqD+2IWtXbQH3NT/yDRp8bKAJVXjM2Q4+av74SKmghOOoP7Yha1dtAfc1P/INGnxsoAlVeMzZDj5q/vhIgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKyNhXuOGzzi/Fj9W3ZSmVPsPN36OznqdkaJSXFYv1aqtI96CxECAAALAwAAAAAAABwEAAAAAAAA"
+    },
+    {
+      "id": "solana-foundation-base",
+      "account": "6kU7k6iMRAuzqdUDJUFs4hmFzG93QgMcodzq6WUpvzvh",
+      "owner": "Stake11111111111111111111111111111111111111",
+      "vote": "9ymU1ayh9mZVyDL4dUUtXKtX1wCaFNzZPGutLJgqzuC1",
+      "staker": "mpa4abUkjQoAvPzREkh5Mo75hZhPFQ2FSH6w7dWKuQ5",
+      "withdrawer": "4ZJhPQAgUseCsWhKvJLTmmRRUV74fdoTpQLNfKoekbPY",
+      "lamports": "57794146810782",
+      "activation": "1047",
+      "deactivation": "18446744073709551615",
+      "sliceBase64": "C3tX3Cj/ybfVg/B/zLkoYwlJPxU2ONkWygfGe4sfMio02afsrglxmkDDTm3Vj734EaOXfr4bASAzO9p0ODAlKwAAAAAAAAAAAAAAAAAAAAAFR0dn5PH8Rp6b7RVvpNOHD2ek8+95bZYJHcoJ866Wo4VoTFk7JDzZCgb4kUOWZWclqIZUb6/018oCLia1RffWnjuXP5A0AAAXBAAAAAAAAP//////////"
+    },
+    {
+      "id": "solana-foundation-matching",
+      "account": "8LhdNmFhWc4Tnd2e89EVpr9hxvqTrZd39WVsBTBnPmsL",
+      "owner": "Stake11111111111111111111111111111111111111",
+      "vote": "9ymU1ayh9mZVyDL4dUUtXKtX1wCaFNzZPGutLJgqzuC1",
+      "staker": "mpa4abUkjQoAvPzREkh5Mo75hZhPFQ2FSH6w7dWKuQ5",
+      "withdrawer": "BVPWEKqzHD4H2pAX34wbtn33eNpzx6KxHxuaJW7uKZei",
+      "lamports": "294671443789",
+      "activation": "1044",
+      "deactivation": "18446744073709551615",
+      "sliceBase64": "C3tX3Cj/ybfVg/B/zLkoYwlJPxU2ONkWygfGe4sfMiqb2pPFLirjeBQMilYghzMh8quhladEMPMP8PgzQR8JmwAAAAAAAAAAAAAAAAAAAAAFR0dn5PH8Rp6b7RVvpNOHD2ek8+95bZYJHcoJ866Wo4VoTFk7JDzZCgb4kUOWZWclqIZUb6/018oCLia1RffWTWfJm0QAAAAUBAAAAAAAAP//////////"
     }
-  ]
+  ],
+  "foundationChecks": {
+    "observedAt": "2026-10-08T23:42:07.916Z",
+    "epoch": 1052,
+    "note": "Active stake of mpa4ab.../4ZJhPQ... (base) and mpa4ab.../BVPWEK... (matching) on SFDP Approved validators; SOL rounded down.",
+    "validators": [
+      {
+        "identity": "EN5F2BU5juUEWr9zRNNqKuQMi9zBUY1YLPHV5EyMrvnW",
+        "vote": "9ymU1ayh9mZVyDL4dUUtXKtX1wCaFNzZPGutLJgqzuC1",
+        "baseSol": 57794,
+        "matchingSol": 294
+      },
+      {
+        "identity": "3YX7PQuESmR2h95FDgjahEQjyCBhmY1Ts2MsrM1Kg9DS",
+        "vote": "LNRmxHyXAzgBkgxDmb4ZefwLAnSv3fdsjPgjmThoa1T",
+        "baseSol": 53787,
+        "matchingSol": 273
+      },
+      {
+        "identity": "CZanBzZHFzrGY5qKzaX3CNhJ5smHEMTWFFnoeUi4J6dr",
+        "vote": "GzjMbJQDVuBLFY69QwhhjDGDy2o5Q6nswXMuVTCWEFnp",
+        "baseSol": 45814,
+        "matchingSol": 233
+      },
+      {
+        "identity": "hnhCMmnrmod4rcyc3QRKkLEC9XnPTvYJ2gBvjgFiV4o",
+        "vote": "hnhxfrndd827LET6jvnQV4aWqpS2EedaHcT4gj8ArSu",
+        "baseSol": 51394,
+        "matchingSol": 262
+      },
+      {
+        "identity": "BR1aTt4ZZUCwWJDkSYf1hqkYJjo7Mb7Ar8iVTkeSwUB8",
+        "vote": "AbacusTT3yhEFEKkQKjGStDhKDnvSFGpg9EqBwz8FnDF",
+        "baseSol": 50862,
+        "matchingSol": 259
+      },
+      {
+        "identity": "2X7WoaXX9KPqNrNfvguhnwo3rjFPNsfw2t75fGjWRthz",
+        "vote": "BmMVRAVef2qmJ1tJpG3JwRUtnfEiTbvDw9ZeFEi4wE7D",
+        "baseSol": 69311
+      }
+    ]
+  }
 }

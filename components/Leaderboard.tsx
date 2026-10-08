@@ -129,6 +129,7 @@ export function Leaderboard({ rows, unclaimed }: { rows: LeaderboardRow[]; uncla
             <tr role="row">
               <th scope="col" role="columnheader">#</th>
               <th scope="col" role="columnheader">Validator</th>
+              <th scope="col" role="columnheader" className="c-pools">Stake from</th>
               <th scope="col" role="columnheader">Tools</th>
               <th scope="col" role="columnheader" style={{ textAlign: "right" }}>
                 Count
@@ -139,7 +140,7 @@ export function Leaderboard({ rows, unclaimed }: { rows: LeaderboardRow[]; uncla
           <tbody role="rowgroup">
             {visible.length === 0 ? (
               <tr role="row">
-                <td role="cell" colSpan={5} className="empty">
+                <td role="cell" colSpan={6} className="empty">
                   No validators match those filters.
                 </td>
               </tr>
@@ -147,6 +148,8 @@ export function Leaderboard({ rows, unclaimed }: { rows: LeaderboardRow[]; uncla
               visible.map((r, i) => {
                 const name = displayName(r.validator);
                 const site = safeHttpUrl(r.validator.website);
+                const sfdp = showSfdpLabel(r.pools, r.sfdp);
+                const hasBadges = (r.pools?.length ?? 0) > 0 || sfdp;
                 return (
                   <tr role="row" key={`${r.validator.cluster}:${r.validator.identity}`}>
                     <td role="cell" className="rank">{i + 1}</td>
@@ -166,14 +169,22 @@ export function Leaderboard({ rows, unclaimed }: { rows: LeaderboardRow[]; uncla
                               </>
                             )}
                           </div>
-                          {(r.pools?.length || showSfdpLabel(r.pools, r.sfdp)) ? (
-                            <div className="pool-row">
+                          {hasBadges ? (
+                            <div className="pool-row pool-row-m">
                               <PoolBadges pools={r.pools} max={3} />
-                              <SfdpBadge participant={showSfdpLabel(r.pools, r.sfdp)} compact />
+                              <SfdpBadge participant={sfdp} compact />
                             </div>
                           ) : null}
                         </div>
                       </div>
+                    </td>
+                    <td role="cell" className="c-pools">
+                      {hasBadges ? (
+                        <div className="pool-row">
+                          <PoolBadges pools={r.pools} max={3} />
+                          <SfdpBadge participant={sfdp} compact />
+                        </div>
+                      ) : null}
                     </td>
                     <td role="cell" className="c-tools">
                       <div className="tools">

@@ -133,6 +133,18 @@ export function signCommand(message: string): string {
   return `solana sign-offchain-message -k ~/validator-keypair.json "${message}"`;
 }
 
+/** Same message signed with a Ledger that holds the identity key. */
+export function signCommandLedger(message: string): string {
+  return `solana sign-offchain-message -k usb://ledger "${message}"`;
+}
+
+export type SignMethod = "file" | "ledger" | "remote";
+export const SIGN_METHODS: { id: SignMethod; label: string }[] = [
+  { id: "file", label: "Key file" },
+  { id: "ledger", label: "Ledger" },
+  { id: "remote", label: "Another machine" },
+];
+
 /** Typed stand-in for POST /api/v1/claims/check. Runs format checks only; the rest is marked simulated. */
 export function mockCheckClaim(req: ClaimRequest): ClaimCheckResponse {
   const parts = req.message.split(" | ");

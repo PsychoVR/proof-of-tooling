@@ -41,3 +41,14 @@ describe("proof method helpers", () => {
     expect(nextTabIndex(1, "a", 3)).toBeNull();
   });
 });
+
+import { SIGN_METHODS, signCommand, signCommandLedger } from "@/lib/ui/claim";
+
+describe("sign command variants", () => {
+  it("uses the same quoted message for a key file and a Ledger", () => {
+    const m = "proof-of-tooling v1 | claim | github.com/a/b | id | 2026-10-07";
+    expect(signCommand(m)).toBe(`solana sign-offchain-message -k ~/validator-keypair.json "${m}"`);
+    expect(signCommandLedger(m)).toBe(`solana sign-offchain-message -k usb://ledger "${m}"`);
+    expect(SIGN_METHODS.map((s) => s.id)).toEqual(["file", "ledger", "remote"]);
+  });
+});

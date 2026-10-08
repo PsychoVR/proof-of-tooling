@@ -21,6 +21,7 @@ import {
 import Link from "next/link";
 import { Avatar } from "./Avatar";
 import { CodeBlock } from "./CodeBlock";
+import { SignCommandTabs } from "./SignCommandTabs";
 import { WebProofTabs } from "./WebProofTabs";
 
 const PROOF_FILE = ".proof-of-tooling.json";
@@ -202,11 +203,7 @@ export function ClaimWizard({ initial, listed }: { initial?: ClaimPrefill; liste
               )}
             </section>
           )}
-          <p className="lede">
-            Then run this on the machine that holds your identity keypair. It signs one line and prints a base58
-            signature. Nothing leaves your machine, and we never ask for the keypair.
-          </p>
-          <CodeBlock text={signCommand(message)} />
+          <SignCommandTabs message={message} identity={identity.trim()} />
           <p className="note">
             Signing {toolName.trim()} ({category}) as {identity.trim()} on {date}.
           </p>

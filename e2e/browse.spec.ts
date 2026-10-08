@@ -35,13 +35,43 @@ test.describe("home and leaderboard", () => {
     await expect(panel.locator('a[href^="/t/"]')).toHaveCount(4); // only tool pages
   });
 
-  test("avatars are initials only: no remote images anywhere", async ({ page }) => {
-    for (const path of ["/", `/v/${V.overclock.identity}`, "/registry"]) {
+  test("verified validators show their stored icon from our own origin; the rest show an initial", async ({ page }) => {
+    const c = watchConsole(page);
+    const iconPath = `/api/validators/${V.pumpkin.identity}/icon`;
+    await gotoHydrated(page, "/");
+    // Pumpkin's Pool has a stored icon, Overclock does not.
+    await expect(page.locator("tbody tr", { hasText: "Pumpkin's Pool" }).locator(".avatar img")).toHaveAttribute("src", iconPath);
+    await expect(page.locator("tbody tr", { hasText: "Overclock" }).locator(".avatar")).toHaveText(/^[A-Z]$/);
+    await expect(page.locator("tbody tr", { hasText: "Overclock" }).locator(".avatar img")).toHaveCount(0);
+    // No page ever loads an image from another origin.
+    for (const path of ["/", `/v/${V.pumpkin.identity}`, `/v/${V.overclock.identity}`, "/t/watchtower", "/registry"]) {
       await page.goto(path);
-      await expect(page.locator("main img, .avatar img")).toHaveCount(0);
+      for (const src of await page.locator("img").evaluateAll((els) => els.map((e) => e.getAttribute("src") ?? ""))) expect(src.startsWith("/")).toBe(true);
     }
-    await page.goto("/");
-    await expect(page.locator(".avatar").first()).toHaveText(/^[A-Z]$/);
+    await page.goto(`/v/${V.pumpkin.identity}`);
+    await expect(page.locator(".detail-head .avatar img")).toHaveAttribute("src", iconPath);
+    await page.goto(`/v/${V.overclock.identity}`);
+    await expect(page.locator(".detail-head .avatar")).toHaveText(/^[A-Z]$/);
+    await page.goto("/t/watchtower");
+    await expect(page.locator(".list li", { hasText: "Pumpkin's Pool" }).locator(".avatar img")).toHaveAttribute("src", iconPath);
+    c.expectClean();
+  });
+
+  test("the icon endpoint serves the stored image with a long cache, an ETag and nosniff", async ({ request }) => {
+    const res = await request.get(`/api/validators/${V.pumpkin.identity}/icon`);
+    expect(res.status()).toBe(200);
+    expect(res.headers()["content-type"]).toBe("image/png");
+    expect(res.headers()["cache-control"]).toContain("max-age=86400");
+    expect(res.headers()["x-content-type-options"]).toBe("nosniff");
+    expect((await res.body()).subarray(1, 4).toString()).toBe("PNG");
+    const etag = res.headers()["etag"];
+    expect(etag).toMatch(/^"[0-9a-f]{32}"$/);
+    const again = await request.get(`/api/validators/${V.pumpkin.identity}/icon`, { headers: { "if-none-match": etag } });
+    expect(again.status()).toBe(304);
+    expect((await again.body()).length).toBe(0);
+    // No icon stored, or not a key: plain 404, no body.
+    expect((await request.get(`/api/validators/${V.overclock.identity}/icon`)).status()).toBe(404);
+    expect((await request.get("/api/validators/not-a-key/icon")).status()).toBe(404);
   });
 
   test("filters by status, category and search", async ({ page }) => {

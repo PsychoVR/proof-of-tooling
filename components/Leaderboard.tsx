@@ -151,7 +151,7 @@ export function Leaderboard({ rows, unclaimed }: { rows: LeaderboardRow[]; uncla
                     <td role="cell" className="rank">{i + 1}</td>
                     <td role="cell" className="c-validator">
                       <div className="vcell">
-                        <Avatar name={name} />
+                        <Avatar name={name} iconUrl={r.validator.iconUrl} />
                         <div>
                           <div className="vname">
                             <Link href={`/v/${encodeURIComponent(r.validator.identity)}`}>{name}</Link>

@@ -19,6 +19,7 @@ import {
   validateToolUrl,
 } from "@/lib/ui/claim";
 import Link from "next/link";
+import { Avatar } from "./Avatar";
 import { CodeBlock } from "./CodeBlock";
 import { WebProofTabs } from "./WebProofTabs";
 
@@ -285,6 +286,19 @@ export function ClaimWizard({ initial, listed }: { initial?: ClaimPrefill; liste
 }
 
 function ClaimSuccess({ toolName, identity, slug, inReview }: { toolName: string; identity: string; slug?: string; inReview: boolean }) {
+  // The validator as the directory knows it (official on-chain name and our stored icon); the block is skipped if it cannot be read.
+  const [who, setWho] = useState<{ name: string; iconUrl: string | null } | null>(null);
+  useEffect(() => {
+    const ctl = new AbortController();
+    fetch(`/api/v1/validators/${encodeURIComponent(identity)}`, { signal: ctl.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((p: { validator?: { name?: string | null; iconUrl?: string | null } } | null) => {
+        const v = p?.validator;
+        if (v?.name) setWho({ name: v.name, iconUrl: v.iconUrl ?? null });
+      })
+      .catch(() => {});
+    return () => ctl.abort();
+  }, [identity]);
   return (
     <div className="panel step" role="status">
       <div className="step-h">
@@ -296,6 +310,12 @@ function ClaimSuccess({ toolName, identity, slug, inReview }: { toolName: string
           ? `Your signature for ${toolName} checks out. The claim needs a manual review and will count once it is approved.`
           : `${toolName} is now signed by your validator identity and counts in the ledger. Anyone can re-verify the signature in the public registry.`}
       </p>
+      {who && (
+        <p className="vcell" style={{ margin: "12px 0" }}>
+          <Avatar name={who.name} iconUrl={who.iconUrl} />
+          <span className="vname">{who.name}</span>
+        </p>
+      )}
       <div className="btns">
         {slug && !inReview && (
           <Link className="btn primary" href={`/t/${slug}`}>View the tool page</Link>

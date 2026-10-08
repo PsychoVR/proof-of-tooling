@@ -113,12 +113,18 @@ export interface SafeFetchOptions {
   maxQueue?: number;
 }
 
+interface RawResponse {
+  status: number;
+  body: Buffer;
+  location?: string;
+}
+
 /**
- * Builds a fetcher for public https URLs: no redirects, one overall deadline (a slow-drip server
- * cannot hold the request open), capped body, no private addresses, and a global limit on requests
- * in flight (the rest wait in a bounded queue and are refused when it is full).
+ * One https request with one overall deadline (a slow-drip server cannot hold the request open),
+ * capped body, no private addresses, and a global limit on requests in flight (the rest wait in a
+ * bounded queue and are refused when it is full). Redirects are returned, never followed.
  */
-export function createSafeFetcher(opts: SafeFetchOptions = {}): Fetcher {
+function createFetchCore(opts: SafeFetchOptions = {}): (url: string) => Promise<RawResponse> {
   const request: RequestFn = opts.request ?? ((url, o, cb) => https.request(url, o, cb));
   const timeoutMs = opts.timeoutMs ?? FETCH_TIMEOUT_MS;
   const maxBytes = opts.maxBytes ?? MAX_BYTES;
@@ -128,7 +134,7 @@ export function createSafeFetcher(opts: SafeFetchOptions = {}): Fetcher {
   const queue: (() => void)[] = [];
 
   const run = (u: URL) =>
-    new Promise<{ status: number; body: string }>((resolve, reject) => {
+    new Promise<RawResponse>((resolve, reject) => {
       let settled = false;
       let timer: ReturnType<typeof setTimeout> | undefined;
       const settle = (fn: () => void) => {
@@ -148,7 +154,9 @@ export function createSafeFetcher(opts: SafeFetchOptions = {}): Fetcher {
           }
           const chunks: Buffer[] = [];
           let size = 0;
-          const finish = () => settle(() => resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString("utf8") }));
+          const location = res.headers?.location;
+          const finish = () =>
+            settle(() => resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks), location: typeof location === "string" ? location : undefined }));
           res.on("data", (c: Buffer) => {
             size += c.length;
             chunks.push(c);
@@ -204,4 +212,45 @@ export function createSafeFetcher(opts: SafeFetchOptions = {}): Fetcher {
     });
 }
 
+/** Fetcher for public https URLs: no redirects, text body. Used for proof files. */
+export function createSafeFetcher(opts: SafeFetchOptions = {}): Fetcher {
+  const core = createFetchCore(opts);
+  return async (url) => {
+    const r = await core(url);
+    return { status: r.status, body: r.body.toString("utf8") };
+  };
+}
+
 export const safeFetcher: Fetcher = createSafeFetcher();
+
+export interface SafeBinaryFetchOptions extends Omit<SafeFetchOptions, "maxBytes"> {
+  /** Largest body accepted, in bytes. */
+  maxBytes: number;
+  /** Redirect hops followed; every hop goes through the same https and public-address checks. */
+  maxRedirects?: number;
+}
+
+const REDIRECTS = new Set([301, 302, 303, 307, 308]);
+
+/** Same guarantees as the text fetcher, but returns raw bytes and follows a few redirects. Used for validator icons. */
+export function createSafeBinaryFetcher(opts: SafeBinaryFetchOptions): (url: string) => Promise<{ status: number; body: Buffer }> {
+  const core = createFetchCore({ ...opts, maxBytes: opts.maxBytes + 1 });
+  const maxRedirects = opts.maxRedirects ?? 3;
+  return async (url) => {
+    let current = url;
+    for (let hop = 0; ; hop++) {
+      const r = await core(current);
+      if (REDIRECTS.has(r.status) && r.location) {
+        if (hop >= maxRedirects) throw new Error("too many redirects");
+        try {
+          current = new URL(r.location, current).href;
+        } catch {
+          throw new Error("blocked url");
+        }
+        continue;
+      }
+      if (r.body.length > opts.maxBytes) throw new Error("response too large");
+      return { status: r.status, body: r.body };
+    }
+  };
+}

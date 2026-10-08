@@ -62,7 +62,7 @@ describe("buildToolsWithClaims", () => {
     expect(out[0].owner).toEqual({ name: "Alpha", identity: "A", sourceUrl: null });
     expect(out[1].owner).toEqual({ name: "Alpha", identity: "A", sourceUrl: null });
     expect(out[2].owner).toBeNull();
-    expect(out[0].claimedBy).toEqual([{ identity: "A", cluster: "mainnet", name: "Alpha" }]);
+    expect(out[0].claimedBy).toEqual([{ identity: "A", cluster: "mainnet", name: "Alpha", iconUrl: null }]);
     expect(out[1].claims).toHaveLength(1);
     expect(out[2].claims).toHaveLength(0);
   });

@@ -103,7 +103,8 @@ export function parseValidatorInfo(accounts: ConfigAccountRaw[]): Map<string, Va
     out.set(idKey.pubkey, {
       name: sanitizeText(cd.name),
       website: sanitizeUrl(cd.website),
-      iconUrl: null, // remote icons are never loaded (see components/Avatar.tsx)
+      // Only stored here. The browser never loads it: the daily icon job downloads it for verified validators and we serve our copy.
+      iconUrl: sanitizeUrl(cd.iconUrl, { httpsOnly: true }),
     });
   }
   return out;

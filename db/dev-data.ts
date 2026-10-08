@@ -1,7 +1,8 @@
 // Local development and test data: example validators and claims. Never run against production.
 import { eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { claims, endorsements, seedEntries, tools, validators } from "@/db/schema";
+import { claims, endorsements, seedEntries, tools, validatorIcons, validators } from "@/db/schema";
+import { iconEtag } from "@/lib/validator-icons";
 import { SEED_ADDED_BY, SEED_TOOLS as ALL_SEED_TOOLS } from "./seed-data";
 
 // Local and e2e data use a fixed subset of the real seed list, so adding entries to the list never
@@ -26,6 +27,7 @@ export const DEV_VALIDATORS = {
   quiet: { identity: "8ttnpLECYFDLBoH4vKtCCa31hgis1uPwSViJeXXJ5HzZ", vote: "txWBvLxu5DZN5xVGRzpPKJwrmkAwenoW62FZ7q5WB1P", name: "Quiet Validator", stake: "200000000000000" },
 } as const;
 
+const DEV_ICON = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
 const SIG = "1".repeat(88); // placeholder: stored claims are not re-verified by the read paths
 
 /** Refuses to touch anything that is not the local docker database. */
@@ -39,7 +41,7 @@ export function assertLocalDb(url = process.env.DATABASE_URL ?? "") {
 export async function resetDevDb(db: Db = getDb()) {
   assertLocalDb();
   await db.execute(sql`SET FOREIGN_KEY_CHECKS = 0`);
-  for (const t of ["claim_failures", "claim_decisions", "endorsements", "claims", "seed_entries", "tools", "validators"]) {
+  for (const t of ["validator_icons", "claim_failures", "claim_decisions", "endorsements", "claims", "seed_entries", "tools", "validators"]) {
     await db.execute(sql.raw(`TRUNCATE TABLE \`${t}\``));
   }
   await db.execute(sql`SET FOREIGN_KEY_CHECKS = 1`);
@@ -74,6 +76,9 @@ export async function seedDevData(db: Db = getDb()) {
   const pendingUrl = "github.com/blocklogic/new-tool";
   await db.insert(tools).values({ slug: "new-tool", url: pendingUrl, name: "New Tool", category: "Library", kind: "repo" });
   await claim(await idOf(pendingUrl), DEV_VALIDATORS.blockLogic.identity, pendingUrl, "pending");
+
+  // Pumpkin's Pool has a stored on-chain icon (a 1x1 PNG); the other validators fall back to their initial.
+  await db.insert(validatorIcons).values({ identity: DEV_VALIDATORS.pumpkin.identity, contentType: "image/png", bytes: DEV_ICON, etag: iconEtag(DEV_ICON) });
 
   await db.insert(endorsements).values({ toolId: await idOf(mithril), identity: DEV_VALIDATORS.pumpkin.identity, message: "proof-of-tooling v1 | endorse", signature: SIG });
 }

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Avatar } from "@/components/Avatar";
 import { StatusPill } from "@/components/StatusPill";
 import { UnclaimedBy } from "@/components/UnclaimedBy";
 import { toolDisplayUrl } from "@/lib/claims/message";
@@ -16,9 +17,9 @@ export const dynamic = "force-dynamic";
 type Props = { params: Promise<{ slug: string }> };
 
 /** Validators tied to a tool: signed claimants first, otherwise the owner named by the seed entry. */
-function usersOf(tool: ToolWithClaims): { identity: string | null; name: string | null; sourceUrl: string | null }[] {
-  if (tool.claimedBy.length > 0) return tool.claimedBy.map((c) => ({ identity: c.identity, name: c.name, sourceUrl: null }));
-  return tool.owner ? [{ identity: tool.owner.identity, name: tool.owner.name, sourceUrl: tool.owner.sourceUrl }] : [];
+function usersOf(tool: ToolWithClaims): { identity: string | null; name: string | null; sourceUrl: string | null; iconUrl: string | null }[] {
+  if (tool.claimedBy.length > 0) return tool.claimedBy.map((c) => ({ identity: c.identity, name: c.name, sourceUrl: null, iconUrl: c.iconUrl }));
+  return tool.owner ? [{ identity: tool.owner.identity, name: tool.owner.name, sourceUrl: tool.owner.sourceUrl, iconUrl: null }] : [];
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -89,6 +90,7 @@ export default async function ToolPage({ params }: Props) {
             <ul className="list">
               {users.map((u) => (
                 <li key={u.identity ?? u.name}>
+                  {u.identity ? <Avatar name={u.name?.trim() || u.identity} iconUrl={u.iconUrl} /> : null}
                   {u.identity ? (
                     <Link className="linkplain" href={`/v/${encodeURIComponent(u.identity)}`}>
                       {u.name?.trim() || shortKey(u.identity)}

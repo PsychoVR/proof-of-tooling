@@ -34,7 +34,7 @@ describe("binary collation on keys and signatures (migration 0003)", () => {
     const cols = await rows<{ t: string; c: string; k: string }>(sql`
       SELECT TABLE_NAME AS t, COLUMN_NAME AS c, COLLATION_NAME AS k FROM information_schema.COLUMNS
       WHERE TABLE_SCHEMA = DATABASE() AND COLUMN_NAME IN ('identity', 'vote_account', 'signature') ORDER BY 1, 2`);
-    expect(cols.length).toBe(6);
+    expect(cols.length).toBe(7);
     for (const c of cols) expect(c.k, `${c.t}.${c.c}`).toBe("ascii_bin");
   });
 

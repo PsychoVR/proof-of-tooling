@@ -67,7 +67,7 @@ const t = (
     status: signed ? "claimed" : "unclaimed",
     owner: { name: owner.name ?? owner.identity, identity: signed ? owner.identity : null, sourceUrl: null },
     claims,
-    claimedBy: signed ? [{ identity: owner.identity, cluster: owner.cluster, name: owner.name }] : [],
+    claimedBy: signed ? [{ identity: owner.identity, cluster: owner.cluster, name: owner.name, iconUrl: null }] : [],
   };
 };
 

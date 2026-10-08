@@ -1,5 +1,6 @@
 // Pure row -> API shape logic, kept free of DB access so it can be unit tested.
 import type { claims, endorsements, tools, validators } from "@/db/schema";
+import { iconPath } from "@/lib/validator-icons";
 import {
   CATEGORIES,
   type Category,
@@ -21,14 +22,18 @@ export type EndorsementRow = typeof endorsements.$inferSelect;
 
 const iso = (d: Date) => d.toISOString();
 
-export function mapValidator(r: ValidatorRow): Validator {
+/**
+ * `hasIcon`: our own stored copy of the on-chain icon exists. `iconUrl` in the API is then the path that
+ * serves it; the third-party url from validator-info never leaves the server.
+ */
+export function mapValidator(r: ValidatorRow, hasIcon = false): Validator {
   return {
     identity: r.identity,
     cluster: r.cluster,
     voteAccount: r.voteAccount,
     name: r.name,
     website: r.website,
-    iconUrl: r.iconUrl,
+    iconUrl: hasIcon ? iconPath(r.identity) : null,
     activatedStake: r.activatedStake.toString(),
     version: r.version,
     delinquent: r.delinquent,
@@ -78,7 +83,7 @@ export function mapEndorsement(r: EndorsementRow): Endorsement {
   };
 }
 
-export type ValidatorName = { identity: string; cluster: Cluster; name: string | null };
+export type ValidatorName = { identity: string; cluster: Cluster; name: string | null; hasIcon?: boolean };
 
 const nameKey = (identity: string, cluster: string) => `${identity}:${cluster}`;
 
@@ -95,6 +100,7 @@ export function buildToolsWithClaims(
     if (!seedByTool.has(sd.toolId)) seedByTool.set(sd.toolId, { name: sd.validatorName, sourceUrl: sd.sourceUrl ?? null });
   }
   const nameMap = new Map(names.map((n) => [nameKey(n.identity, n.cluster), n.name]));
+  const iconSet = new Set(names.filter((n) => n.hasIcon).map((n) => nameKey(n.identity, n.cluster)));
   const byTool = new Map<number, Claim[]>();
   for (const c of claimRows) {
     if (c.status !== "active" && c.status !== "stale" && c.status !== "pending") continue;
@@ -123,6 +129,7 @@ export function buildToolsWithClaims(
         identity: c.identity,
         cluster: c.cluster,
         name: nameMap.get(nameKey(c.identity, c.cluster)) ?? null,
+        iconUrl: iconSet.has(nameKey(c.identity, c.cluster)) ? iconPath(c.identity) : null,
       })),
     };
   });
@@ -163,6 +170,7 @@ export function buildLeaderboard(
   toolRows: ToolRow[],
   page: number,
   pageSize: number,
+  iconIdentities: ReadonlySet<string> = new Set(),
 ): { items: LeaderboardRow[]; total: number } {
   const toolById = new Map(toolRows.map((t) => [t.id, t]));
   // tool id -> "signed" if any active claim, else "stale", per validator
@@ -185,7 +193,7 @@ export function buildLeaderboard(
     const signed = list.filter((t) => t.status === "signed").length;
     if (signed === 0) continue;
     list.sort((a, b) => a.name.localeCompare(b.name));
-    rows.push({ validator: mapValidator(v), toolCount: signed, claimedCount: signed, tools: list });
+    rows.push({ validator: mapValidator(v, iconIdentities.has(v.identity)), toolCount: signed, claimedCount: signed, tools: list });
   }
   rows.sort((a, b) => {
     if (b.toolCount !== a.toolCount) return b.toolCount - a.toolCount;

@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray, max, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { ENABLED_CLUSTERS, isEnabledCluster } from "@/lib/clusters";
-import { claims, endorsements, seedEntries, tools, validators } from "@/db/schema";
+import { claims, endorsements, seedEntries, tools, validatorIcons, validators } from "@/db/schema";
 import {
   buildLeaderboard,
   buildStats,
@@ -26,6 +26,13 @@ import type {
 const PUBLIC_CLAIM_STATUSES = ["active", "stale"] as const;
 const DISPLAY_CLAIM_STATUSES = ["active", "stale", "pending"] as const;
 
+/** Identities (among the given ones) that have a stored icon. */
+async function withIcons(identities: string[]): Promise<Set<string>> {
+  if (identities.length === 0) return new Set();
+  const rows = await getDb().select({ identity: validatorIcons.identity }).from(validatorIcons).where(inArray(validatorIcons.identity, identities));
+  return new Set(rows.map((r) => r.identity));
+}
+
 async function withClaims(toolRows: ToolRow[]): Promise<ToolWithClaims[]> {
   if (toolRows.length === 0) return [];
   const db = getDb();
@@ -44,7 +51,8 @@ async function withClaims(toolRows: ToolRow[]): Promise<ToolWithClaims[]> {
         .from(validators)
         .where(inArray(validators.identity, ids))
     : [];
-  return buildToolsWithClaims(toolRows, claimRows, names, seeds);
+  const icons = await withIcons(ids);
+  return buildToolsWithClaims(toolRows, claimRows, names.map((n) => ({ ...n, hasIcon: icons.has(n.identity) })), seeds);
 }
 
 export async function getStats(): Promise<Stats> {
@@ -89,7 +97,7 @@ export async function getLeaderboard(opts: {
     .where(and(opts.cluster ? eq(validators.cluster, opts.cluster) : inArray(validators.cluster, [...ENABLED_CLUSTERS]), match))
     .orderBy(desc(validators.activatedStake));
 
-  const { items, total } = buildLeaderboard(validatorRows, liveClaims, toolRows, page, pageSize);
+  const { items, total } = buildLeaderboard(validatorRows, liveClaims, toolRows, page, pageSize, await withIcons(identities));
   return { items, page, pageSize, total };
 }
 
@@ -117,7 +125,7 @@ export async function getValidatorProfile(identity: string): Promise<ValidatorPr
   const toolRows = toolIds.length ? await db.select().from(tools).where(inArray(tools.id, toolIds)) : [];
 
   return {
-    validator: mapValidator(best),
+    validator: mapValidator(best, (await withIcons([best.identity])).has(best.identity)),
     tools: await withClaims(toolRows),
     endorsements: endorsementRows.map(mapEndorsement),
   };

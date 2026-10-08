@@ -55,6 +55,9 @@ test("wizard: valid CLI signature verifies and registers end to end", async ({ p
 
   await page.getByRole("button", { name: "Register claim" }).click();
   await expect(page.getByRole("heading", { name: "Claim registered" })).toBeVisible();
+  // The success screen names the validator as the directory knows it (no stored icon for this one: initial).
+  await expect(page.locator("[role=status] .vname")).toHaveText("SunshineVR");
+  await expect(page.locator("[role=status] .avatar")).toHaveText("S");
 
   // The success screen links to the tool page and the profile, and offers a prefilled post on X.
   await expect(page.getByRole("link", { name: "View the tool page" })).toHaveAttribute("href", "/t/github-com-psychovr-proof-of-tooling");

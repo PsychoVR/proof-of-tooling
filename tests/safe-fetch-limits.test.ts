@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createSafeFetcher, isPrivateIp } from "@/lib/safe-fetch";
+import { createSafeBinaryFetcher, createSafeFetcher, isPrivateIp } from "@/lib/safe-fetch";
 
 afterEach(() => vi.useRealTimers());
 
@@ -158,4 +158,54 @@ describe("isPrivateIp: reserved ranges (B1)", () => {
     "allows %s",
     (ip) => expect(isPrivateIp(ip)).toBe(false),
   );
+});
+
+describe("createSafeBinaryFetcher", () => {
+  it("returns raw bytes and follows a redirect, checking each hop", async () => {
+    const { calls, request } = harness();
+    const p = createSafeBinaryFetcher({ request, maxBytes: 100 })(URL_OK);
+    calls[0].deliver({ location: "/moved.png" }).statusCode = 302;
+    calls[0].res.finish();
+    await vi.waitFor(() => expect(calls).toHaveLength(2));
+    const res = calls[1].deliver({});
+    res.emit("data", Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    res.finish();
+    expect(await p).toEqual({ status: 200, body: Buffer.from([0x89, 0x50, 0x4e, 0x47]) });
+  });
+
+  it("refuses a redirect to http, to an ip and a chain longer than the limit", async () => {
+    const hop = async (location: string, maxRedirects?: number) => {
+      const { calls, request } = harness();
+      const p = createSafeBinaryFetcher({ request, maxBytes: 100, maxRedirects })(URL_OK);
+      calls[0].deliver({ location }).statusCode = 301;
+      calls[0].res.finish();
+      return p;
+    };
+    await expect(hop("http://example.com/i.png")).rejects.toThrow("blocked url");
+    await expect(hop("https://127.0.0.1/i.png")).rejects.toThrow("blocked url");
+    await expect(hop("https://example.com/again.png", 0)).rejects.toThrow("too many redirects");
+  });
+
+  it("rejects a body over the limit, declared or streamed", async () => {
+    const declared = harness();
+    const p1 = createSafeBinaryFetcher({ request: declared.request, maxBytes: 10 })(URL_OK);
+    declared.calls[0].deliver({ "content-length": "5000" });
+    await expect(p1).rejects.toThrow("response too large");
+
+    const streamed = harness();
+    const p2 = createSafeBinaryFetcher({ request: streamed.request, maxBytes: 10 })(URL_OK);
+    const res = streamed.calls[0].deliver({});
+    res.emit("data", Buffer.alloc(11));
+    res.finish();
+    await expect(p2).rejects.toThrow("response too large");
+  });
+
+  it("accepts exactly the limit", async () => {
+    const { calls, request } = harness();
+    const p = createSafeBinaryFetcher({ request, maxBytes: 10 })(URL_OK);
+    const res = calls[0].deliver({});
+    res.emit("data", Buffer.alloc(10, 1));
+    res.finish();
+    expect((await p).body).toHaveLength(10);
+  });
 });

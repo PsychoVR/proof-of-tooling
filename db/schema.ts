@@ -1,6 +1,7 @@
 import {
   bigint,
   boolean,
+  customType,
   date,
   index,
   int,
@@ -40,6 +41,20 @@ export const validators = mysqlTable(
     index("validators_vote_account_idx").on(t.voteAccount),
   ],
 );
+
+const mediumblob = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "mediumblob" });
+
+/**
+ * Icons of verified validators (those with an active claim), downloaded once a day from the url in
+ * their on-chain validator-info and served from here. Kept in the database, which survives deploys.
+ */
+export const validatorIcons = mysqlTable("validator_icons", {
+  identity: varchar("identity", { length: 64 }).primaryKey(),
+  contentType: varchar("content_type", { length: 32 }).notNull(),
+  bytes: mediumblob("bytes").notNull(),
+  etag: varchar("etag", { length: 64 }).notNull(),
+  fetchedAt: timestamp("fetched_at").defaultNow().notNull(),
+});
 
 export const tools = mysqlTable(
   "tools",

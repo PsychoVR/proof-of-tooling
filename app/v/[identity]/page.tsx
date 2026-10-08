@@ -41,7 +41,7 @@ export default async function ValidatorPage({ params }: Props) {
     <>
       <p className="crumbs"><Link href="/">Ledger</Link> / Validator</p>
       <div className="detail-head">
-        <Avatar name={name} large />
+        <Avatar name={name} iconUrl={v.iconUrl} large />
         <div>
           <h1 className="page-title" style={{ marginTop: 0 }}>{name}</h1>
           <span className="vsub mono" title={v.identity}>{shortKey(v.identity)}</span>{" "}

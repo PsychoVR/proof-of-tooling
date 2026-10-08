@@ -88,7 +88,7 @@ export interface ToolWithClaims extends Tool {
   /** Owner from the seed entry (unclaimed) or from the claim (claimed). */
   owner: ToolOwner | null;
   claims: Claim[];
-  claimedBy: Pick<Validator, "identity" | "cluster" | "name">[];
+  claimedBy: Pick<Validator, "identity" | "cluster" | "name" | "iconUrl">[];
 }
 
 export interface ValidatorProfile {

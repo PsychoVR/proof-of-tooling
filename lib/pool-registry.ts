@@ -40,6 +40,7 @@ export function approvedToPools(rows: readonly ApprovedRow[], logo: (id: string)
   for (const r of rows) {
     if (!r.name || !r.logoId) continue;
     const staticDef = STAKE_POOLS.find((p) => p.id === r.logoId);
+    if (staticDef?.enabled === false) continue; // a switched-off registry pool stays off even if a candidate is approved under its id
     const logoPath = staticDef?.logo ?? logo(r.logoId);
     if (!logoPath) continue;
     const def = byId.get(r.logoId) ?? { id: r.logoId, name: staticDef?.name ?? r.name, logo: logoPath, authorities: [] };
@@ -67,6 +68,6 @@ export interface PoolMeta {
 /** Display data for every pool that may be shown: the static registry plus approved candidates. Nothing else is ever shown. */
 export function poolMetaMap(approved: readonly StakePoolDef[]): Map<string, PoolMeta> {
   const out = new Map<string, PoolMeta>();
-  for (const p of [...approved, ...STAKE_POOLS]) out.set(p.id, { name: p.name, logo: p.logo });
+  for (const p of [...approved, ...STAKE_POOLS]) if (p.enabled !== false) out.set(p.id, { name: p.name, logo: p.logo });
   return out;
 }

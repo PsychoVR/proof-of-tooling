@@ -119,11 +119,12 @@ describe("pools job against the database (simulated RPC)", () => {
     const lamports = 200_000_000_000n;
     await getDb().insert(validatorPoolStake).values([
       { identity: V.pumpkin.identity, poolId: "vault", lamports },
+      { identity: V.pumpkin.identity, poolId: "jpool", lamports },
       { identity: V.pumpkin.identity, poolId: "aero", lamports },
       { identity: V.pumpkin.identity, poolId: "ghost", lamports: 900_000_000_000n },
     ]);
     const pools = (await getPoolBadges([V.pumpkin.identity])).get(V.pumpkin.identity)!.pools;
-    expect(pools.map((p) => p.id)).toEqual(["aero", "vault"]);
+    expect(pools.map((p) => p.id)).toEqual(["jpool", "vault"]); // "aero" is switched off in the registry
   });
 
   it("a failing validator keeps its previous pools; pools that disappear are removed on the next good scan", async () => {

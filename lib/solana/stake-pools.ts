@@ -28,13 +28,22 @@ export interface StakePoolDef {
   /** Repo-owned asset, never hotlinked. */
   logo: string;
   authorities: PoolAuthority[];
+  /**
+   * `false` keeps the entry in the registry but switches it off: its authorities are not indexed, nothing is
+   * scanned or attributed for it, and it is never shown. Defaults to enabled.
+   */
+  enabled?: boolean;
 }
 
 // Alphabetical by name: the registry gives no pool precedence.
 export const STAKE_POOLS: readonly StakePoolDef[] = [
   {
+    // DISABLED until the official name and brand are confirmed: the pool's mint is named "Phase Delegation Staked SOL
+    // (pdSOL)", so it is not certain this pool is the "Aero" product. The authority below is verified (see fixtures)
+    // and stays so the entry can be switched on by removing `enabled: false`.
     id: "aero",
     name: "Aero",
+    enabled: false,
     logo: "/pools/aero.png",
     authorities: [{ kind: "spl-pool", pool: "aero2ePURjuEgLKTzcUmF6RypBncBGd7pMUYCoSsVJ6", program: SPL_STAKE_POOL_PROGRAM }],
   },
@@ -110,6 +119,7 @@ export function buildAuthorityIndex(pools: readonly StakePoolDef[] = STAKE_POOLS
     claims[side].set(address, set);
   };
   for (const pool of [...pools, ...extra]) {
+    if (pool.enabled === false) continue;
     for (const a of pool.authorities) {
       if (a.kind === "address") claim(a.role === "withdrawer" ? "withdrawers" : "stakers", a.address, pool.id);
       else claim("withdrawers", splWithdrawAuthority(a.pool, a.program), pool.id);

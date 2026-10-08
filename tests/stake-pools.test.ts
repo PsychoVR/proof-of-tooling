@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import accountsFixture from "./fixtures/stake-pools/stake-accounts.json";
 import poolsFixture from "./fixtures/stake-pools/spl-pools.json";
 import sfdpFixture from "./fixtures/stake-pools/sfdp-participants.json";
+import { approvedToPools, poolMetaMap } from "@/lib/pool-registry";
 import { findProgramAddress, isOnCurve, splWithdrawAuthority } from "@/lib/solana/pda";
 import {
   buildAuthorityIndex,
@@ -84,7 +85,6 @@ describe("registry", () => {
     blazestake: "blazestake",
     jpool: "jpool",
     vault: "vault",
-    aero: "aero",
     marinade: "marinade",
     "marinade-native": "marinade",
   };
@@ -99,6 +99,23 @@ describe("registry", () => {
       expect(isActiveStake(s, EPOCH)).toBe(true);
     });
   }
+
+  // Aero is switched off until its official name and brand are confirmed (its mint says "pdSOL"). The fixture is real
+  // and its authority still derives from the registry entry, but nothing may be attributed or shown for it.
+  it("a disabled pool is neither indexed, attributed nor given display metadata", () => {
+    const aero = poolById("aero")!;
+    expect(aero.enabled).toBe(false);
+    const s = parseStakeSlice(slice("aero"))!;
+    expect(s.withdrawer).toBe(splWithdrawAuthority(aero.authorities[0].kind === "spl-pool" ? aero.authorities[0].pool : "", SPL_STAKE_POOL_PROGRAM));
+    expect(index.withdrawers.has(s.withdrawer)).toBe(false);
+    expect(attributeStake(s, index)).toBeNull();
+    expect(aggregatePoolStake([slice("aero")], index, EPOCH).size).toBe(0);
+    expect(poolMetaMap([]).has("aero")).toBe(false);
+    expect(poolMetaMap([]).has("jito")).toBe(true);
+    // approving a candidate under the id of a disabled pool does not bring it back
+    const row = { pool: "Pool111", program: SPL_STAKE_POOL_PROGRAM, name: "Aero", logoId: "aero" };
+    expect(approvedToPools([row], () => "/pools/aero.png")).toEqual([]);
+  });
 
   it("Marinade Native is matched by staker, liquid Marinade by withdrawer", () => {
     const native = parseStakeSlice(slice("marinade-native"))!;

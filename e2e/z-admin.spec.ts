@@ -29,6 +29,23 @@ test("pending list is paginated and validates its parameters (N2)", async ({ req
   }
 });
 
+test("stake pool candidate endpoints are admin only and validate their input", async ({ request }) => {
+  for (const headers of [{}, { authorization: "Bearer nope" }, { authorization: "Bearer local-dev-cron-secret-0123456789abcdef" }]) {
+    expect((await request.get("/api/admin/pools/candidates", { headers })).status()).toBe(401);
+    expect((await request.post(`/api/admin/pools/candidates/${"9".repeat(44)}/approve`, { headers, data: { name: "X", logoId: "jito" } })).status()).toBe(401);
+    expect((await request.post(`/api/admin/pools/candidates/${"9".repeat(44)}/reject`, { headers })).status()).toBe(401);
+  }
+  expect(await (await request.get("/api/admin/pools/candidates", { headers: auth })).json()).toMatchObject({ items: [], total: 0, limit: 50, offset: 0 });
+  expect((await request.get("/api/admin/pools/candidates?status=nope", { headers: auth })).status()).toBe(400);
+  const missing = `/api/admin/pools/candidates/${"9".repeat(44)}`;
+  expect((await request.post(`${missing}/approve`, { headers: auth, data: { name: "X", logoId: "jito" } })).status()).toBe(404);
+  expect((await request.post(`${missing}/approve`, { headers: auth, data: { name: "X", logoId: "../jito" } })).status()).toBe(404);
+  expect((await request.post(`${missing}/reject`, { headers: auth })).status()).toBe(404);
+  expect((await request.post("/api/admin/pools/candidates/not-an-address/reject", { headers: auth })).status()).toBe(400);
+  // the cron endpoint does not accept the admin secret
+  expect((await request.post("/api/cron/pools", { headers: auth })).status()).toBe(401);
+});
+
 test("lists pending claims with an etag and requires it to decide", async ({ request }) => {
   const list = await (await request.get("/api/admin/claims", { headers: auth })).json();
   expect(list.total).toBe(1);

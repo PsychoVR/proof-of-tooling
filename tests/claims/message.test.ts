@@ -98,3 +98,19 @@ describe("serializeOffchainV0", () => {
     expect(() => serializeOffchainV0("a".repeat(1213))).toThrow(RangeError);
   });
 });
+
+import { signatureDateStatus, utcToday } from "@/lib/claims";
+
+describe("signatureDateStatus", () => {
+  const now = new Date("2026-10-07T23:59:00Z");
+  it("accepts today, the last 7 days and one day ahead", () => {
+    for (const d of ["2026-10-07", "2026-09-30", "2026-10-08"]) expect(signatureDateStatus(d, now)).toBe("ok");
+  });
+  it("flags older and further-ahead dates", () => {
+    expect(signatureDateStatus("2026-09-29", now)).toBe("stale");
+    expect(signatureDateStatus("2026-10-09", now)).toBe("future");
+  });
+  it("gives today's UTC date", () => {
+    expect(utcToday(now)).toBe("2026-10-07");
+  });
+});

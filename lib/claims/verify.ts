@@ -1,12 +1,10 @@
 import bs58 from "bs58";
 import nacl from "tweetnacl";
 import type { ClaimCheckResult } from "@/lib/types";
-import { parseClaimMessage } from "./message";
+import { MAX_FUTURE_DAYS, MAX_SIGNATURE_AGE_DAYS, daysSince, parseClaimMessage } from "./message";
 import { OFFCHAIN_MAX_MESSAGE_BYTES, serializeOffchainV0 } from "./offchain";
 
-export const MAX_SIGNATURE_AGE_DAYS = 7;
-const MAX_FUTURE_DAYS = 1;
-const DAY_MS = 86_400_000;
+export { MAX_SIGNATURE_AGE_DAYS };
 
 export interface VerifyInput {
   message: string;
@@ -34,13 +32,6 @@ function decodeFixed(s: string, length: number): Uint8Array | null {
 /** True when the string is base58 for exactly 32 bytes (a Solana public key). */
 export function isValidPubkey(s: string): boolean {
   return decodeFixed(s, 32) !== null;
-}
-
-/** Whole UTC calendar days between the signed date and today. */
-function daysSince(date: string, now: Date): number {
-  const signed = Date.parse(`${date}T00:00:00Z`);
-  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  return Math.round((today - signed) / DAY_MS);
 }
 
 export function verifyClaimSignature(input: VerifyInput): VerifyResult {

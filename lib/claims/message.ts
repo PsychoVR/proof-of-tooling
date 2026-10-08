@@ -79,3 +79,27 @@ export function parseClaimMessage(message: string): ParsedClaimMessage | null {
   }
   return { action: action as ClaimAction, toolUrl, identity, date, extras };
 }
+
+export const MAX_SIGNATURE_AGE_DAYS = 7;
+export const MAX_FUTURE_DAYS = 1;
+const DAY_MS = 86_400_000;
+
+/** Whole UTC calendar days between a signed date (YYYY-MM-DD) and today; negative when it is ahead. */
+export function daysSince(date: string, now: Date): number {
+  const signed = Date.parse(`${date}T00:00:00Z`);
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return Math.round((today - signed) / DAY_MS);
+}
+
+/** Today's UTC date as YYYY-MM-DD, the date a fresh claim message carries. */
+export function utcToday(now: Date): string {
+  return now.toISOString().slice(0, 10);
+}
+
+/** Whether the server would accept a message dated `date` right now (see verifyClaimSignature). */
+export function signatureDateStatus(date: string, now: Date): "ok" | "stale" | "future" {
+  const age = daysSince(date, now);
+  if (age > MAX_SIGNATURE_AGE_DAYS) return "stale";
+  if (age < -MAX_FUTURE_DAYS) return "future";
+  return "ok";
+}

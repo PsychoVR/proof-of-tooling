@@ -2,8 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { CATEGORIES, type Category, type ClaimResponse } from "@/lib/types";
+import { utcToday } from "@/lib/claims/message";
 import {
   CHECK_LABELS,
+  DATE_REGENERATED_NOTICE,
+  WIZARD_STORAGE_KEY,
+  parseWizardState,
+  reconcileWizardDate,
+  serializeWizardState,
   buildClaimMessage,
   type ClaimPrefill,
   githubNewFileUrl,
@@ -35,7 +41,7 @@ export interface ListedTool {
 }
 
 export function ClaimWizard({ initial, listed }: { initial?: ClaimPrefill; listed?: ListedTool }) {
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState<0 | 1 | 2>(0);
   const [toolName, setToolName] = useState(initial?.name ?? "");
   const [url, setUrl] = useState(initial?.url ?? "");
   const [category, setCategory] = useState<Category | "">(initial?.category ?? "");
@@ -47,7 +53,9 @@ export function ClaimWizard({ initial, listed }: { initial?: ClaimPrefill; liste
   const [failure, setFailure] = useState<ClaimResponse | null>(null);
   const [unreachable, setUnreachable] = useState(false);
   // Date is fixed when the wizard opens so the message does not change under the signer.
-  const [date] = useState(() => new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => utcToday(new Date()));
+  const [notice, setNotice] = useState<string | null>(null);
+  const [restored, setRestored] = useState(false);
 
   const urlErr = validateToolUrl(url);
   const idErr = validateIdentity(identity);
@@ -65,6 +73,43 @@ export function ClaimWizard({ initial, listed }: { initial?: ClaimPrefill; liste
       .catch(() => {});
     return () => ctl.abort();
   }, [repoKey, step]);
+  // Restore what was typed before a reload or a trip back; storage may be blocked, so every access is guarded.
+  /* eslint-disable react-hooks/set-state-in-effect -- sessionStorage only exists in the browser, so it is read after mount */
+  useEffect(() => {
+    try {
+      const s = parseWizardState(window.sessionStorage.getItem(WIZARD_STORAGE_KEY));
+      // A link with another tool url wins over what was stored.
+      if (s && !(initial?.url && initial.url !== s.url)) {
+        const { state, regenerated } = reconcileWizardDate(s, new Date());
+        const complete = !validateToolUrl(state.url) && !validateIdentity(state.identity) && !!state.name.trim() && !!state.category;
+        setToolName(state.name);
+        setUrl(state.url);
+        setCategory(state.category);
+        setIdentity(state.identity);
+        setDate(state.date);
+        setSignature(state.signature);
+        setStep(complete ? state.step : 0);
+        if (regenerated) setNotice(DATE_REGENERATED_NOTICE);
+      }
+    } catch {
+      // Nothing restored.
+    }
+    setRestored(true);
+    // Runs once on mount; `initial` never changes for a mounted wizard.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
+  const done = !!(registered && registered.ok);
+  useEffect(() => {
+    if (!restored) return;
+    try {
+      if (done) window.sessionStorage.removeItem(WIZARD_STORAGE_KEY);
+      else window.sessionStorage.setItem(WIZARD_STORAGE_KEY, serializeWizardState({ step, name: toolName, url, category, identity, date, signature }));
+    } catch {
+      // Storage unavailable: the wizard still works, it just does not survive a reload.
+    }
+  }, [restored, done, step, toolName, url, category, identity, date, signature]);
+
   const request = { message, signature: signature.trim(), category: category || undefined, toolName: toolName.trim() };
 
   const next = () => {
@@ -76,6 +121,16 @@ export function ClaimWizard({ initial, listed }: { initial?: ClaimPrefill; liste
 
   // Verifies and, when every check passes, registers in one request; failed checks are shown as they are.
   const submit = async () => {
+    // The day may have changed since the message was generated: sign a fresh one rather than send a dead date.
+    const fresh = reconcileWizardDate({ step, name: toolName, url, category, identity, date, signature }, new Date());
+    if (fresh.regenerated) {
+      setDate(fresh.state.date);
+      setSignature("");
+      setStep(1);
+      setNotice(DATE_REGENERATED_NOTICE);
+      return;
+    }
+    setNotice(null);
     setBusy(true);
     setFailure(null);
     setUnreachable(false);
@@ -99,6 +154,10 @@ export function ClaimWizard({ initial, listed }: { initial?: ClaimPrefill; liste
           </li>
         ))}
       </ol>
+
+      {notice && step < 2 && (
+        <p className="note" role="status" style={{ marginBottom: 12 }}>{notice}</p>
+      )}
 
       {step === 0 && (
         <form className="panel step" noValidate onSubmit={(e) => { e.preventDefault(); next(); }}>

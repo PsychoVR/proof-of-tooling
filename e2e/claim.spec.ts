@@ -87,6 +87,53 @@ test("wizard: valid CLI signature verifies and registers end to end", async ({ p
   c.expectClean();
 });
 
+test("wizard: a reload keeps the fields, the step and the pasted signature", async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-10-07T12:00:00Z"));
+  await fillStep1(page);
+  await page.getByRole("button", { name: "I have the signature" }).click();
+  await page.locator("#c-sig").fill("pasted-signature");
+  await page.reload();
+  await page.waitForLoadState("networkidle");
+  await expect(page.getByRole("heading", { name: "Verify and register" })).toBeVisible();
+  await expect(page.locator("#c-sig")).toHaveValue("pasted-signature");
+  await page.getByRole("button", { name: "Back" }).click();
+  await expect(page.getByText(valid.message).first()).toBeVisible();
+  await page.getByRole("button", { name: "Back" }).click();
+  await expect(page.locator("#c-name")).toHaveValue("Proof of Tooling");
+  await expect(page.locator("#c-cat")).toHaveValue("Meta");
+  await expect(page.locator("#c-url")).toHaveValue(TOOL);
+  await expect(page.locator("#c-id")).toHaveValue(fixture.identity);
+});
+
+test("wizard: storage that cannot be read does not break the form", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "sessionStorage", { get() { throw new Error("blocked"); } });
+  });
+  await gotoHydrated(page, "/claim");
+  await page.locator("#c-name").fill("Still works");
+  await expect(page.locator("#c-name")).toHaveValue("Still works");
+});
+
+test("wizard: a restored message with a dead date is regenerated and must be signed again", async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-10-07T12:00:00Z"));
+  await gotoHydrated(page, "/claim");
+  await page.evaluate(
+    ([id, url]) =>
+      sessionStorage.setItem(
+        "pot-claim-wizard-v1",
+        JSON.stringify({ step: 2, name: "Proof of Tooling", url, category: "Meta", identity: id, date: "2026-09-01", signature: "old-signature" }),
+      ),
+    [fixture.identity, TOOL],
+  );
+  await page.reload();
+  await page.waitForLoadState("networkidle");
+  await expect(page.getByText("The date of your claim message is no longer valid")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Sign the claim" })).toBeVisible();
+  await expect(page.getByText(valid.message).first()).toBeVisible(); // dated 2026-10-07
+  await page.getByRole("button", { name: "I have the signature" }).click();
+  await expect(page.locator("#c-sig")).toHaveValue("");
+});
+
 test("wizard: sites get three accessible proof methods", async ({ page }) => {
   await gotoHydrated(page, "/claim");
   await page.locator("#c-name").fill("Pool dashboard");

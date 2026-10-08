@@ -1,5 +1,5 @@
 // Claim wizard helpers: message building, input validation and the check client.
-import { normalizeToolUrl } from "@/lib/claims/message";
+import { isValidDate, normalizeToolUrl, signatureDateStatus, utcToday } from "@/lib/claims/message";
 import { SITE_URL, TWITTER_HANDLE } from "@/lib/seo";
 import { CATEGORIES, type Category, type ClaimCheckResponse, type ClaimCheckResult, type ClaimRequest, type ClaimResponse } from "@/lib/types";
 
@@ -243,3 +243,54 @@ export function parseClaimPrefill(params: Record<string, Param>): ClaimPrefill {
     category: (CATEGORIES as readonly string[]).includes(category) ? (category as Category) : "",
   };
 }
+
+/** sessionStorage key of the claim wizard: reloading or going back keeps what was typed. */
+export const WIZARD_STORAGE_KEY = "pot-claim-wizard-v1";
+
+export interface WizardState {
+  step: 0 | 1 | 2;
+  name: string;
+  url: string;
+  category: Category | "";
+  identity: string;
+  /** Date (UTC) of the message being signed. */
+  date: string;
+  signature: string;
+}
+
+const clip = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max) : "");
+
+/** Reads the stored wizard state defensively: anything malformed is dropped (null), never an error. */
+export function parseWizardState(raw: string | null): WizardState | null {
+  if (!raw) return null;
+  let j: unknown;
+  try {
+    j = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (typeof j !== "object" || j === null) return null;
+  const o = j as Record<string, unknown>;
+  const date = clip(o.date, 10);
+  if (!isValidDate(date)) return null;
+  const category = (CATEGORIES as readonly string[]).includes(o.category as string) ? (o.category as Category) : "";
+  const step = o.step === 1 || o.step === 2 ? o.step : 0;
+  return { step, name: clip(o.name, 80), url: clip(o.url, 300), category, identity: clip(o.identity, 60), date, signature: clip(o.signature, 200) };
+}
+
+export function serializeWizardState(s: WizardState): string {
+  return JSON.stringify(s);
+}
+
+/**
+ * The message date has to be one the server still accepts. When it is not (the wizard sat open or
+ * was restored days later), the date becomes today, the old signature no longer matches and the
+ * visitor goes back to the signing step.
+ */
+export function reconcileWizardDate(s: WizardState, now: Date): { state: WizardState; regenerated: boolean } {
+  if (signatureDateStatus(s.date, now) === "ok") return { state: s, regenerated: false };
+  return { state: { ...s, date: utcToday(now), signature: "", step: s.step === 2 ? 1 : s.step }, regenerated: true };
+}
+
+export const DATE_REGENERATED_NOTICE =
+  "The date of your claim message is no longer valid, so it was regenerated with today's date (UTC). Sign the new message again and paste the new signature.";

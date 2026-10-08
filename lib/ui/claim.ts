@@ -1,4 +1,5 @@
 // Claim wizard helpers: message building, input validation and the check client.
+import { MIN_FORK_OWN_COMMITS } from "@/lib/claims/rules";
 import { isValidDate, normalizeToolUrl, signatureDateStatus, utcToday } from "@/lib/claims/message";
 import { SITE_URL, TWITTER_HANDLE } from "@/lib/seo";
 import { CATEGORIES, type Category, type ClaimCheckResponse, type ClaimCheckResult, type ClaimRequest, type ClaimResponse } from "@/lib/types";
@@ -294,3 +295,6 @@ export function reconcileWizardDate(s: WizardState, now: Date): { state: WizardS
 
 export const DATE_REGENERATED_NOTICE =
   "The date of your claim message is no longer valid, so it was regenerated with today's date (UTC). Sign the new message again and paste the new signature.";
+
+/** Hint under the url field; the fork rule is read from the rules so the text cannot drift from them. */
+export const URL_HINT = `Public repo or live site. Forks need at least ${MIN_FORK_OWN_COMMITS} commits of their own; fewer go to manual review.`;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { parseWizardState, reconcileWizardDate, serializeWizardState, type WizardState } from "@/lib/ui/claim";
+import { MIN_FORK_OWN_COMMITS } from "@/lib/claims";
+import { URL_HINT, parseWizardState, reconcileWizardDate, serializeWizardState, type WizardState } from "@/lib/ui/claim";
 
 const base: WizardState = {
   step: 2, name: "Tool", url: "github.com/a/b", category: "Meta",
@@ -42,5 +43,12 @@ describe("reconcileWizardDate", () => {
     const r = reconcileWizardDate({ ...base, step: 0, date: "2026-12-01" }, now);
     expect(r.regenerated).toBe(true);
     expect(r.state.step).toBe(0);
+  });
+});
+
+describe("URL_HINT", () => {
+  it("states the real fork rule", () => {
+    expect(URL_HINT).toContain(`Forks need at least ${MIN_FORK_OWN_COMMITS} commits of their own`);
+    expect(URL_HINT).not.toContain("do not count");
   });
 });

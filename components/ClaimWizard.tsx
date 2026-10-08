@@ -6,6 +6,7 @@ import { utcToday } from "@/lib/claims/message";
 import {
   CHECK_LABELS,
   DATE_REGENERATED_NOTICE,
+  URL_HINT,
   WIZARD_STORAGE_KEY,
   parseWizardState,
   reconcileWizardDate,
@@ -210,7 +211,7 @@ export function ClaimWizard({ initial, listed }: { initial?: ClaimPrefill; liste
             <label htmlFor="c-url">Repo or site URL</label>
             <input id="c-url" className="mono-in" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="github.com/you/your-tool" aria-invalid={touched && !!urlErr} aria-describedby="c-url-e" autoComplete="off" />
             <span id="c-url-e" className={touched && urlErr ? "err" : "hint"}>
-              {touched && urlErr ? urlErr : "Public repo or live site. Forks do not count."}
+              {touched && urlErr ? urlErr : URL_HINT}
             </span>
           </div>
           <div className="field">

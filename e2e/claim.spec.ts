@@ -14,6 +14,7 @@ async function fillStep1(page: Page) {
   await gotoHydrated(page, "/claim");
   await page.locator("#c-name").fill("Proof of Tooling");
   await page.locator("#c-cat").selectOption("Meta");
+  await expect(page.getByText("Forks need at least 5 commits of their own; fewer go to manual review.")).toBeVisible();
   await page.locator("#c-url").fill(`https://www.${TOOL}/`); // normalized by the wizard
   await page.locator("#c-id").fill(fixture.identity);
   await page.getByRole("button", { name: "Generate claim" }).click();

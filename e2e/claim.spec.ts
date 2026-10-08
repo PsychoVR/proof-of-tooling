@@ -44,16 +44,12 @@ test("wizard: valid CLI signature verifies and registers end to end", async ({ p
 
   // A signature for a different message fails the check.
   await page.locator("#c-sig").fill(stale.signature);
-  await page.getByRole("button", { name: "Verify signature" }).click();
-  await expect(page.getByText("Some checks failed.")).toBeVisible();
+  await page.getByRole("button", { name: "Verify and register" }).click();
+  await expect(page.getByText("Some checks failed. Nothing was recorded.")).toBeVisible();
 
-  // The real fixture passes every server check, not the simulated preview.
+  // The real fixture passes every server check and is registered with that single click.
   await page.locator("#c-sig").fill(valid.signature);
-  await page.getByRole("button", { name: "Verify signature" }).click();
-  await expect(page.getByText("All checks passed.")).toBeVisible();
-  await expect(page.getByText(/simulated/i)).toHaveCount(0);
-
-  await page.getByRole("button", { name: "Register claim" }).click();
+  await page.getByRole("button", { name: "Verify and register" }).click();
   await expect(page.getByRole("heading", { name: "Claim registered" })).toBeVisible();
   // The success screen names the validator as the directory knows it (no stored icon for this one: initial).
   await expect(page.locator("[role=status] .vname")).toHaveText("SunshineVR");

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CATEGORIES, type Category, type ClaimCheckResponse, type ClaimResponse } from "@/lib/types";
+import { CATEGORIES, type Category, type ClaimResponse } from "@/lib/types";
 import {
   CHECK_LABELS,
   buildClaimMessage,
@@ -10,7 +10,6 @@ import {
   proofHint,
   proofJson,
   proofTarget,
-  checkClaim,
   registerClaim,
   shareOnXUrl,
   signCommand,
@@ -26,7 +25,7 @@ import { SignCommandTabs } from "./SignCommandTabs";
 import { WebProofTabs } from "./WebProofTabs";
 
 const PROOF_FILE = ".proof-of-tooling.json";
-const STEPS = ["Describe the tool", "Sign the claim", "Verify the signature"];
+const STEPS = ["Describe the tool", "Sign the claim", "Verify and register"];
 
 export interface ListedTool {
   slug: string;
@@ -44,8 +43,9 @@ export function ClaimWizard({ initial, listed }: { initial?: ClaimPrefill; liste
   const [signature, setSignature] = useState("");
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [registered, setRegistered] = useState<ClaimResponse | null | undefined>(undefined);
-  const [outcome, setOutcome] = useState<{ result: ClaimCheckResponse; simulated: boolean } | null>(null);
+  const [registered, setRegistered] = useState<ClaimResponse | null>(null);
+  const [failure, setFailure] = useState<ClaimResponse | null>(null);
+  const [unreachable, setUnreachable] = useState(false);
   // Date is fixed when the wizard opens so the message does not change under the signer.
   const [date] = useState(() => new Date().toISOString().slice(0, 10));
 
@@ -74,21 +74,16 @@ export function ClaimWizard({ initial, listed }: { initial?: ClaimPrefill; liste
     setStep(1);
   };
 
-  const verify = async () => {
+  // Verifies and, when every check passes, registers in one request; failed checks are shown as they are.
+  const submit = async () => {
     setBusy(true);
-    setOutcome(null);
+    setFailure(null);
+    setUnreachable(false);
     try {
-      setRegistered(undefined);
-      setOutcome(await checkClaim(request));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const register = async () => {
-    setBusy(true);
-    try {
-      setRegistered(await registerClaim(request));
+      const res = await registerClaim(request);
+      if (!res) setUnreachable(true);
+      else if (res.ok) setRegistered(res);
+      else setFailure(res);
     } finally {
       setBusy(false);
     }
@@ -228,30 +223,25 @@ export function ClaimWizard({ initial, listed }: { initial?: ClaimPrefill; liste
         <div className="panel step">
           <div className="step-h">
             <span className="num" aria-hidden="true">3</span>
-            <h2>Verify the signature</h2>
+            <h2>Verify and register</h2>
           </div>
           <div className="field">
             <label htmlFor="c-sig">Signature (base58)</label>
             <textarea id="c-sig" rows={3} value={signature} onChange={(e) => setSignature(e.target.value)} placeholder="Output of solana sign-offchain-message" spellCheck={false} />
           </div>
+          <p className="note">One click checks the signature and the ownership proof and, if everything passes, registers the claim.</p>
           <div className="btns">
             <button type="button" className="btn" onClick={() => setStep(1)}>Back</button>
-            <button type="button" className="btn primary" onClick={verify} disabled={busy || !signature.trim()}>
-              {busy ? "Verifying..." : "Verify signature"}
+            <button type="button" className="btn primary" onClick={submit} disabled={busy || !signature.trim()}>
+              {busy ? "Verifying..." : "Verify and register"}
             </button>
           </div>
           <div aria-live="polite">
-            {outcome && (
-              <div className={`result ${outcome.result.ok ? "ok" : "bad"}`}>
-                <strong className={outcome.result.ok ? "ok" : "bad"}>
-                  {outcome.result.ok
-                    ? outcome.result.inReview
-                      ? "Checks passed. This claim needs a manual review before it counts."
-                      : "All checks passed."
-                    : "Some checks failed."}
-                </strong>
+            {failure && (
+              <div className="result bad">
+                <strong className="bad">Some checks failed. Nothing was recorded.</strong>
                 <ul className="checks">
-                  {outcome.result.checks.map((c) => (
+                  {failure.checks.map((c) => (
                     <li key={c.id} className={c.ok ? "" : "x"}>
                       {CHECK_LABELS[c.id]}
                       {c.detail ? ` (${c.detail})` : ""}
@@ -259,21 +249,11 @@ export function ClaimWizard({ initial, listed }: { initial?: ClaimPrefill; liste
                     </li>
                   ))}
                 </ul>
-                {outcome.result.ok && !outcome.simulated && registered === undefined && (
-                  <div className="btns">
-                    <button type="button" className="btn primary" onClick={register} disabled={busy}>
-                      {busy ? "Registering..." : "Register claim"}
-                    </button>
-                  </div>
-                )}
-                {registered === null && <strong className="bad">Could not reach the service. Try again.</strong>}
-                {registered && !registered.ok && <strong className="bad">The claim was not recorded.</strong>}
-                {outcome.simulated && (
-                  <span className="mock-note">
-                    Preview mode: the verification service is not connected yet, so this result is simulated and
-                    nothing was recorded.
-                  </span>
-                )}
+              </div>
+            )}
+            {unreachable && (
+              <div className="result bad">
+                <strong className="bad">Could not reach the service. Try again.</strong>
               </div>
             )}
           </div>

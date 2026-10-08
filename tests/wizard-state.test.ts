@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MIN_FORK_OWN_COMMITS } from "@/lib/claims";
-import { URL_HINT, parseWizardState, reconcileWizardDate, serializeWizardState, type WizardState } from "@/lib/ui/claim";
+import { URL_HINT, checkAdvice, parseWizardState, reconcileWizardDate, serializeWizardState, type WizardState } from "@/lib/ui/claim";
 
 const base: WizardState = {
   step: 2, name: "Tool", url: "github.com/a/b", category: "Meta",
@@ -50,5 +50,18 @@ describe("URL_HINT", () => {
   it("states the real fork rule", () => {
     expect(URL_HINT).toContain(`Forks need at least ${MIN_FORK_OWN_COMMITS} commits of their own`);
     expect(URL_HINT).not.toContain("do not count");
+  });
+});
+
+describe("checkAdvice", () => {
+  it("explains the likely cause of format, date and signature failures", () => {
+    expect(checkAdvice("format", "2026-10-07")).toContain("edited or retyped by hand");
+    expect(checkAdvice("date", "2026-10-07")).toContain("today is 2026-10-07");
+    const sig = checkAdvice("signature", "2026-10-07")!;
+    for (const s of ["single quotes", "identity keypair", "vote account or withdrawer"]) expect(sig).toContain(s);
+  });
+
+  it("has no advice for the other steps", () => {
+    for (const id of ["encoding", "status", "validator", "proof", "repo", "rules"] as const) expect(checkAdvice(id, "x")).toBeNull();
   });
 });

@@ -48,6 +48,9 @@ test("wizard: valid CLI signature verifies and registers end to end", async ({ p
   await page.locator("#c-sig").fill(stale.signature);
   await page.getByRole("button", { name: "Verify and register" }).click();
   await expect(page.getByText("Some checks failed. Nothing was recorded.")).toBeVisible();
+  // A signature that does not match says what usually causes it and how to fix it.
+  await expect(page.getByText("the shell altered the quotes (in PowerShell wrap the message in single quotes")).toBeVisible();
+  await expect(page.getByText(/the key is not your validator identity keypair/)).toBeVisible();
 
   // The real fixture passes every server check and is registered with that single click.
   await page.locator("#c-sig").fill(valid.signature);
@@ -134,6 +137,37 @@ test("wizard: a restored message with a dead date is regenerated and must be sig
   await expect(page.getByText(valid.message).first()).toBeVisible(); // dated 2026-10-07
   await page.getByRole("button", { name: "I have the signature" }).click();
   await expect(page.locator("#c-sig")).toHaveValue("");
+});
+
+test("wizard: format and date failures explain the likely cause", async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-10-07T12:00:00Z"));
+  await page.route("**/api/v1/claims", (route) =>
+    route.fulfill({
+      status: 422,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: false,
+        checks: [
+          { id: "format", ok: true },
+          { id: "date", ok: false, detail: "Signed 9 days ago; the limit is 7." },
+        ],
+      }),
+    }),
+  );
+  await fillStep1(page);
+  await page.getByRole("button", { name: "I have the signature" }).click();
+  await page.locator("#c-sig").fill(valid.signature);
+  await page.getByRole("button", { name: "Verify and register" }).click();
+  await expect(page.getByText("must be today's date in UTC (today is 2026-10-07)")).toBeVisible();
+  await page.route("**/api/v1/claims", (route) =>
+    route.fulfill({
+      status: 422,
+      contentType: "application/json",
+      body: JSON.stringify({ ok: false, checks: [{ id: "format", ok: false, detail: "Message is not a valid proof-of-tooling v1 line in printable ASCII." }] }),
+    }),
+  );
+  await page.getByRole("button", { name: "Verify and register" }).click();
+  await expect(page.getByText("edited or retyped by hand. Copy it exactly from step 2")).toBeVisible();
 });
 
 test("wizard: sites get three accessible proof methods", async ({ page }) => {

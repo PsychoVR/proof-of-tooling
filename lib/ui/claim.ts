@@ -298,3 +298,17 @@ export const DATE_REGENERATED_NOTICE =
 
 /** Hint under the url field; the fork rule is read from the rules so the text cannot drift from them. */
 export const URL_HINT = `Public repo or live site. Forks need at least ${MIN_FORK_OWN_COMMITS} commits of their own; fewer go to manual review.`;
+
+/** Most likely cause and fix for a failed signature, format or date check; null for the other steps. */
+export function checkAdvice(id: ClaimCheckResult["id"], today: string): string | null {
+  switch (id) {
+    case "format":
+      return "Most likely the message was edited or retyped by hand. Copy it exactly from step 2, including the spaces around each |, instead of rewriting it.";
+    case "date":
+      return `The date in the message must be today's date in UTC (today is ${today}) or within the last 7 days. If it is older, go back to step 2 to get a message dated today and sign that one.`;
+    case "signature":
+      return "Most likely one of these: the message was changed after it was copied (copy the whole command from step 2 untouched); the shell altered the quotes (in PowerShell wrap the message in single quotes, or escape each double quote); or the key is not your validator identity keypair (not the vote account or withdrawer key). Check that solana-keygen pubkey on your key file prints your identity.";
+    default:
+      return null;
+  }
+}

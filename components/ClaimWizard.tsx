@@ -5,6 +5,7 @@ import { CATEGORIES, type Category, type ClaimResponse } from "@/lib/types";
 import { utcToday } from "@/lib/claims/message";
 import {
   CHECK_LABELS,
+  checkAdvice,
   DATE_REGENERATED_NOTICE,
   URL_HINT,
   WIZARD_STORAGE_KEY,
@@ -317,6 +318,9 @@ export function ClaimWizard({ initial, listed }: { initial?: ClaimPrefill; liste
                       {CHECK_LABELS[c.id]}
                       {c.detail ? ` (${c.detail})` : ""}
                       {c.id === "proof" && !c.ok && proofHint(url, identity) ? ` ${proofHint(url, identity)}` : ""}
+                      {!c.ok && checkAdvice(c.id, utcToday(new Date())) ? (
+                        <span className="note" style={{ display: "block" }}>{checkAdvice(c.id, utcToday(new Date()))}</span>
+                      ) : null}
                     </li>
                   ))}
                 </ul>

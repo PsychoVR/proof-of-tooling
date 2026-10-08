@@ -1,7 +1,7 @@
 // Local development and test data: example validators and claims. Never run against production.
 import { eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { claims, endorsements, seedEntries, tools, validatorIcons, validators } from "@/db/schema";
+import { claims, endorsements, seedEntries, tools, validatorIcons, validatorPoolScan, validatorPoolStake, validatorSfdp, validators } from "@/db/schema";
 import { iconEtag } from "@/lib/validator-icons";
 import { SEED_ADDED_BY, SEED_TOOLS as ALL_SEED_TOOLS } from "./seed-data";
 
@@ -79,6 +79,26 @@ export async function seedDevData(db: Db = getDb()) {
 
   // Pumpkin's Pool has a stored on-chain icon (a 1x1 PNG); the other validators fall back to their initial.
   await db.insert(validatorIcons).values({ identity: DEV_VALIDATORS.pumpkin.identity, contentType: "image/png", bytes: DEV_ICON, etag: iconEtag(DEV_ICON) });
+
+  // Stake pools and SFDP: Pumpkin's Pool has five pools (the home row shows three plus "+2"), Overclock one.
+  const sol = (n: number) => BigInt(n) * BigInt(1_000_000_000);
+  await db.insert(validatorPoolStake).values([
+    { identity: DEV_VALIDATORS.pumpkin.identity, poolId: "jito", lamports: sol(12_000) },
+    { identity: DEV_VALIDATORS.pumpkin.identity, poolId: "marinade", lamports: sol(5_000) },
+    { identity: DEV_VALIDATORS.pumpkin.identity, poolId: "blazestake", lamports: sol(800) },
+    { identity: DEV_VALIDATORS.pumpkin.identity, poolId: "jpool", lamports: sol(300) },
+    { identity: DEV_VALIDATORS.pumpkin.identity, poolId: "vault", lamports: sol(150) },
+    { identity: DEV_VALIDATORS.overclock.identity, poolId: "jito", lamports: sol(250) },
+  ]);
+  await db.insert(validatorPoolScan).values([
+    { identity: DEV_VALIDATORS.pumpkin.identity, epoch: 1052 },
+    { identity: DEV_VALIDATORS.overclock.identity, epoch: 1052 },
+  ]);
+  const checked = new Date("2026-10-07T04:00:00Z");
+  await db.insert(validatorSfdp).values([
+    { identity: DEV_VALIDATORS.pumpkin.identity, participant: true, checkedAt: checked, lastOkAt: checked },
+    { identity: DEV_VALIDATORS.overclock.identity, participant: false, checkedAt: checked, lastOkAt: checked },
+  ]);
 
   await db.insert(endorsements).values({ toolId: await idOf(mithril), identity: DEV_VALIDATORS.pumpkin.identity, message: "proof-of-tooling v1 | endorse", signature: SIG });
 }

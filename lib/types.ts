@@ -95,6 +95,9 @@ export interface ValidatorProfile {
   validator: Validator;
   tools: ToolWithClaims[];
   endorsements: Endorsement[];
+  /** Same as on a leaderboard row: only for validators with an active claim. */
+  pools?: PoolBadge[];
+  sfdp?: SfdpStatus | null;
 }
 
 export interface Stats {
@@ -123,11 +126,31 @@ export interface LeaderboardTool extends Pick<Tool, "id" | "slug" | "name" | "ca
   status: LeaderboardToolStatus;
 }
 
+/** A liquid-staking pool that delegates at least 100 SOL of active stake to a verified validator. Name and logo are curated by us. */
+export interface PoolBadge {
+  id: string;
+  name: string;
+  /** Path of a logo that ships with the app (/pools/...). */
+  logo: string;
+  /** Active stake delegated by the pool, in whole SOL. */
+  sol: number;
+}
+
+/** SFDP membership read from the Solana Foundation list. `checkedAt` is when the list was last read successfully (ISO 8601). */
+export interface SfdpStatus {
+  participant: boolean;
+  checkedAt: string;
+}
+
 export interface LeaderboardRow {
   validator: Validator;
   toolCount: number;
   claimedCount: number;
   tools: LeaderboardTool[];
+  /** Only for validators with an active claim: pools sorted by SOL, largest first (ties by id). Empty when none qualifies. */
+  pools?: PoolBadge[];
+  /** Only for validators with an active claim: null until the SFDP list has been read once. */
+  sfdp?: SfdpStatus | null;
 }
 
 /** GET /api/v1/stats */

@@ -1,7 +1,8 @@
 import { and, desc, eq, inArray, max, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { ENABLED_CLUSTERS, isEnabledCluster } from "@/lib/clusters";
-import { claims, endorsements, seedEntries, tools, validatorIcons, validators } from "@/db/schema";
+import { claims, endorsements, seedEntries, tools, validatorIcons, validatorPoolStake, validatorSfdp, validators } from "@/db/schema";
+import { loadApprovedPools, poolMetaMap } from "@/lib/pool-registry";
 import {
   buildLeaderboard,
   buildStats,
@@ -15,7 +16,9 @@ import type {
   Category,
   Cluster,
   LeaderboardResponse,
+  PoolBadge,
   RegistryResponse,
+  SfdpStatus,
   Stats,
   ToolStatus,
   ToolWithClaims,
@@ -31,6 +34,39 @@ async function withIcons(identities: string[]): Promise<Set<string>> {
   if (identities.length === 0) return new Set();
   const rows = await getDb().select({ identity: validatorIcons.identity }).from(validatorIcons).where(inArray(validatorIcons.identity, identities));
   return new Set(rows.map((r) => r.identity));
+}
+
+const LAMPORTS_PER_SOL = 1_000_000_000n;
+
+/**
+ * Stake pool badges and SFDP status of verified validators, read from our own tables (never from the RPC).
+ * Pools that are not in the registry or approved are never returned, whatever a stale row says.
+ * Callers pass only identities with an active claim; every one of them gets an entry.
+ */
+export async function getPoolBadges(identities: string[]): Promise<Map<string, { pools: PoolBadge[]; sfdp: SfdpStatus | null }>> {
+  const out = new Map<string, { pools: PoolBadge[]; sfdp: SfdpStatus | null }>();
+  if (identities.length === 0) return out;
+  const db = getDb();
+  const [stake, sfdpRows, approved] = await Promise.all([
+    db.select().from(validatorPoolStake).where(inArray(validatorPoolStake.identity, identities)),
+    db.select().from(validatorSfdp).where(inArray(validatorSfdp.identity, identities)),
+    loadApprovedPools(),
+  ]);
+  const meta = poolMetaMap(approved);
+  for (const id of identities) out.set(id, { pools: [], sfdp: null });
+  for (const r of stake) {
+    const m = meta.get(r.poolId);
+    if (!m) continue;
+    out.get(r.identity)?.pools.push({ id: r.poolId, name: m.name, logo: m.logo, sol: Number((r.lamports + LAMPORTS_PER_SOL / 2n) / LAMPORTS_PER_SOL) });
+  }
+  for (const v of out.values()) v.pools.sort((a, b) => b.sol - a.sol || (a.id < b.id ? -1 : 1));
+  for (const r of sfdpRows) {
+    if (r.lastOkAt) {
+      const e = out.get(r.identity);
+      if (e) e.sfdp = { participant: r.participant, checkedAt: r.lastOkAt.toISOString() };
+    }
+  }
+  return out;
 }
 
 async function withClaims(toolRows: ToolRow[]): Promise<ToolWithClaims[]> {
@@ -97,8 +133,15 @@ export async function getLeaderboard(opts: {
     .where(and(opts.cluster ? eq(validators.cluster, opts.cluster) : inArray(validators.cluster, [...ENABLED_CLUSTERS]), match))
     .orderBy(desc(validators.activatedStake));
 
-  const { items, total } = buildLeaderboard(validatorRows, liveClaims, toolRows, page, pageSize, await withIcons(identities));
-  return { items, page, pageSize, total };
+  const built = buildLeaderboard(validatorRows, liveClaims, toolRows, page, pageSize, await withIcons(identities));
+  // Badges only for validators whose claim is active (verified): stale or pending ones show none.
+  const verified = new Set(liveClaims.filter((c) => c.status === "active").map((c) => c.identity));
+  const badges = await getPoolBadges(built.items.map((i) => i.validator.identity).filter((id) => verified.has(id)));
+  const items = built.items.map((row) => {
+    const b = badges.get(row.validator.identity);
+    return b ? { ...row, pools: b.pools, sfdp: b.sfdp } : row;
+  });
+  return { items, page, pageSize, total: built.total };
 }
 
 export async function getValidatorProfile(identity: string): Promise<ValidatorProfile | null> {
@@ -116,7 +159,7 @@ export async function getValidatorProfile(identity: string): Promise<ValidatorPr
 
   const [claimed, endorsementRows] = await Promise.all([
     db
-      .select({ toolId: claims.toolId })
+      .select({ toolId: claims.toolId, status: claims.status })
       .from(claims)
       .where(and(eq(claims.identity, identity), inArray(claims.status, [...DISPLAY_CLAIM_STATUSES]))),
     db.select().from(endorsements).where(eq(endorsements.identity, identity)),
@@ -124,10 +167,12 @@ export async function getValidatorProfile(identity: string): Promise<ValidatorPr
   const toolIds = [...new Set(claimed.map((r) => r.toolId))];
   const toolRows = toolIds.length ? await db.select().from(tools).where(inArray(tools.id, toolIds)) : [];
 
+  const badges = claimed.some((c) => c.status === "active") ? (await getPoolBadges([best.identity])).get(best.identity) : undefined;
   return {
     validator: mapValidator(best, (await withIcons([best.identity])).has(best.identity)),
     tools: await withClaims(toolRows),
     endorsements: endorsementRows.map(mapEndorsement),
+    ...(badges ? { pools: badges.pools, sfdp: badges.sfdp } : {}),
   };
 }
 

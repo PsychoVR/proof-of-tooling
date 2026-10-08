@@ -10,6 +10,8 @@ import { failureReason, INTERNAL_REASON } from "@/lib/claim-failures";
 import { enforceIpLimits, logWouldBlock } from "@/lib/ip-limit-mode";
 import { getToolSlugById } from "@/lib/queries";
 import { refreshIconFor } from "@/jobs/icons";
+import { refreshPoolsFor } from "@/jobs/pools";
+import { e2eOverrides } from "@/lib/claims-stub";
 import { parseClaimMessage, verifyClaimSignature } from "@/lib/claims";
 
 const bodySchema = z.object({
@@ -87,6 +89,13 @@ export async function handleClaimRequest(req: Request, persist: boolean) {
   }
   const reason = failureReason(result);
   if (reason) await deps.recordFailure?.(kind, reason);
+  // A claim that just became active starts counting: fetch its icon and stake pools in the background (each is best
+  // effort and never throws, and the pools scan is skipped if the validator was scanned recently).
+  // The Playwright build (claims stub on) never reaches out to the network.
+  if (persist && result.ok && result.claim?.status === "active" && !e2eOverrides()) {
+    void refreshIconFor(result.claim.identity);
+    void refreshPoolsFor(result.claim.identity);
+  }
   if (persist && result.ok && result.claim) {
     // Best effort: the claim is already stored, the slug only lets the client link to the tool page.
     const toolSlug = await getToolSlugById(result.claim.toolId).catch(() => null);

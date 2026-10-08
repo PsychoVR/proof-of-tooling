@@ -7,6 +7,7 @@ import { CATEGORIES, type Category, type Cluster, type LeaderboardRow, type Tool
 import { claimLink } from "@/lib/ui/claim";
 import { CLUSTER_LABEL, displayName, safeHttpUrl, shortKey } from "@/lib/ui/format";
 import { Avatar } from "./Avatar";
+import { PoolBadges, SfdpBadge } from "./PoolBadge";
 import { StatusPill } from "./StatusPill";
 import { UnclaimedBy } from "./UnclaimedBy";
 import { ToolChip } from "./ToolChip";
@@ -165,6 +166,12 @@ export function Leaderboard({ rows, unclaimed }: { rows: LeaderboardRow[]; uncla
                               </>
                             )}
                           </div>
+                          {(r.pools?.length || r.sfdp?.participant) ? (
+                            <div className="pool-row">
+                              <PoolBadges pools={r.pools} max={3} />
+                              <SfdpBadge participant={r.sfdp?.participant} compact />
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     </td>

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Avatar } from "@/components/Avatar";
 import { CodeBlock } from "@/components/CodeBlock";
+import { PoolBadges, SfdpBadge } from "@/components/PoolBadge";
 import { StatusPill } from "@/components/StatusPill";
 import { ToolChip } from "@/components/ToolChip";
 import { getValidatorProfile } from "@/lib/queries";
@@ -32,7 +33,8 @@ export default async function ValidatorPage({ params }: Props) {
   const id = parseIdentityParam((await params).identity);
   const profile = id ? await getValidatorProfile(id) : null; // not a public key: 404 without touching the database
   if (!profile) notFound();
-  const { validator: v, tools, endorsements } = profile;
+  const { validator: v, tools, endorsements, pools, sfdp } = profile;
+  const hasBadges = (pools?.length ?? 0) > 0 || sfdp?.participant === true;
   const name = displayName(v);
   const site = safeHttpUrl(v.website);
   const badge = `[![Proof of Tooling](https://tooling.sunshinevr.io/badge/${v.identity}.svg)](https://tooling.sunshinevr.io/v/${v.identity})`;
@@ -49,6 +51,16 @@ export default async function ValidatorPage({ params }: Props) {
           {v.delinquent && <span className="status withdrawn">Delinquent</span>}
         </div>
       </div>
+
+      {hasBadges && (
+        <section className="pool-section" aria-label="Stake pools and programs">
+          {(pools?.length ?? 0) > 0 && <h2 className="label">Stake pools</h2>}
+          <div className="pool-row">
+            <PoolBadges pools={pools} chip />
+            <SfdpBadge participant={sfdp?.participant} />
+          </div>
+        </section>
+      )}
 
       <div className="grid2" style={{ marginTop: 24 }}>
         <section className="panel" aria-labelledby="net-h">

@@ -7,7 +7,7 @@ const OTHER = "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin";
 const json = (ids: string[]) => ({ status: 200, body: JSON.stringify({ identities: ids }) });
 const nf = { status: 404, body: "" };
 const noTxt = async (): Promise<string[][]> => [];
-const RAW = "https://raw.githubusercontent.com";
+const API = "https://api.github.com/repos";
 const PROOF = ".proof-of-tooling.json";
 
 /** Fetcher answering from a url -> response map; anything else is a 404. */
@@ -15,9 +15,9 @@ const router = (map: Record<string, { status: number; body: string }>) =>
   vi.fn(async (u: string) => map[u] ?? nf);
 
 describe("repo proof (repo first, then the owner's account locations)", () => {
-  const repo = `${RAW}/me/tool/HEAD/${PROOF}`;
-  const dotGithub = `${RAW}/me/.github/HEAD/${PROOF}`;
-  const profile = `${RAW}/me/me/HEAD/${PROOF}`;
+  const repo = `${API}/me/tool/contents/${PROOF}`;
+  const dotGithub = `${API}/me/.github/contents/${PROOF}`;
+  const profile = `${API}/me/me/contents/${PROOF}`;
 
   it("accepts the repo file and does not look further", async () => {
     const f = router({ [repo]: json([ID]) });
@@ -46,13 +46,14 @@ describe("repo proof (repo first, then the owner's account locations)", () => {
     expect(r.ok).toBe(false);
     expect(f.mock.calls.map((c) => c[0]).sort()).toEqual([dotGithub, profile, repo].sort());
     expect(r.detail).toContain("HTTP 404");
+    expect(r.detail).toContain("If you just added the file, wait a couple of minutes and try again.");
     expect(r.detail).toContain("github.com/me/.github/.proof-of-tooling.json and github.com/me/me/.proof-of-tooling.json");
   });
 
   it("a file in another owner's account is never consulted", async () => {
-    const f = router({ [`${RAW}/evil/evil/HEAD/${PROOF}`]: json([ID]), [`${RAW}/evil/.github/HEAD/${PROOF}`]: json([ID]) });
+    const f = router({ [`${API}/evil/evil/contents/${PROOF}`]: json([ID]), [`${API}/evil/.github/contents/${PROOF}`]: json([ID]) });
     expect((await checkProofFile("github.com/me/tool", ID, f, noTxt)).ok).toBe(false);
-    expect(f.mock.calls.every((c) => c[0].startsWith(`${RAW}/me/`))).toBe(true);
+    expect(f.mock.calls.every((c) => c[0].startsWith(`${API}/me/`))).toBe(true);
   });
 
   it("does not fetch the same location twice when the repo is an account location", async () => {

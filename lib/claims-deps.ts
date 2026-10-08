@@ -6,6 +6,7 @@ import { ENABLED_CLUSTERS } from "@/lib/clusters";
 import { getEnv } from "@/lib/env";
 import { e2eOverrides } from "@/lib/claims-stub";
 import { resolveTxt } from "@/lib/dns-txt";
+import { createGithubAwareFetcher } from "@/lib/github-proof-fetch";
 import { safeFetcher } from "@/lib/safe-fetch";
 import type { Fetcher, RepoMetadata } from "@/lib/claims";
 import {
@@ -179,7 +180,7 @@ export function createClaimsDeps(): ClaimsDeps {
   return {
     now: () => new Date(),
     recordFailure: recordClaimFailure,
-    fetcher: safeFetcher,
+    fetcher: createGithubAwareFetcher(safeFetcher),
     resolveTxt,
     getRepoMetadata,
 

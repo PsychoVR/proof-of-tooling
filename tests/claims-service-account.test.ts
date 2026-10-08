@@ -4,7 +4,7 @@ import { ACCOUNT_PROOF_REASON, processClaim, type ClaimsDeps } from "@/lib/claim
 import type { Claim } from "@/lib/types";
 
 const claim = cli.cases.find((c) => c.name === "valid-claim")!;
-const REPO_FILE = "https://raw.githubusercontent.com/psychovr/proof-of-tooling/HEAD/.proof-of-tooling.json";
+const REPO_FILE = "https://api.github.com/repos/psychovr/proof-of-tooling/contents/.proof-of-tooling.json";
 const listed = { status: 200, body: JSON.stringify({ identities: [cli.identity] }) };
 
 function deps(answers: (url: string) => { status: number; body: string }): ClaimsDeps {

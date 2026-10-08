@@ -27,6 +27,14 @@ const DOMAIN = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}
 // Optional path under the domain: plain segments only, no dot-segments, no query or fragment.
 const WEB_PATH = /^(?:\/(?!\.{1,2}(?:\/|$))[A-Za-z0-9._~+-]{1,100}){0,8}$/;
 
+/**
+ * GitHub contents API url of the proof file at the root of the default branch. It is read through
+ * the API rather than raw.githubusercontent.com, whose cache can hide a file created minutes ago.
+ */
+function contentsUrl(owner: string, repo: string): string {
+  return `https://api.github.com/repos/${owner}/${repo}/contents/${PROOF_FILE}`;
+}
+
 /** Host and path of a web tool URL, or null when it is not a supported public domain. */
 function splitWeb(toolUrl: string): { host: string; domain: string } | null {
   const slash = toolUrl.indexOf("/");
@@ -56,8 +64,7 @@ export function proofFileUrl(toolUrl: string): { kind: "repo" | "web"; url: stri
   const gh = GITHUB_REPO.exec(toolUrl);
   if (gh) {
     if (gh[2] === "." || gh[2] === "..") return null;
-    // HEAD resolves to the default branch.
-    return { kind: "repo", url: `https://raw.githubusercontent.com/${gh[1]}/${gh[2]}/HEAD/${PROOF_FILE}` };
+    return { kind: "repo", url: contentsUrl(gh[1], gh[2]) };
   }
   const web = splitWeb(toolUrl);
   return web ? { kind: "web", url: `https://${web.host}${WELL_KNOWN_PATH}` } : null;
@@ -72,7 +79,7 @@ export function accountProofUrls(toolUrl: string): string[] {
   const gh = GITHUB_REPO.exec(toolUrl);
   if (!gh) return [];
   const owner = gh[1];
-  return [".github", owner].map((r) => `https://raw.githubusercontent.com/${owner}/${r}/HEAD/${PROOF_FILE}`);
+  return [".github", owner].map((r) => contentsUrl(owner, r));
 }
 
 type Outcome = { ok: true } | { ok: false; detail: string };
@@ -101,7 +108,9 @@ async function checkJsonFile(url: string, identity: string, fetcher: Fetcher): P
   return { ok: true };
 }
 
-const shown = (rawUrl: string) => rawUrl.replace("https://raw.githubusercontent.com/", "github.com/").replace("/HEAD/", "/");
+const shown = (apiUrl: string) => apiUrl.replace("https://api.github.com/repos/", "github.com/").replace("/contents/", "/");
+
+const FRESH_FILE_HINT = "If you just added the file, wait a couple of minutes and try again.";
 
 /** Repo file first, then the owner's two account-level locations. */
 async function checkRepo(toolUrl: string, repoUrl: string, identity: string, fetcher: Fetcher): Promise<RepoOutcome> {
@@ -111,7 +120,7 @@ async function checkRepo(toolUrl: string, repoUrl: string, identity: string, fet
   const others = accountProofUrls(toolUrl).filter((u) => u !== repoUrl);
   const results = await Promise.all(others.map((u) => checkJsonFile(u, identity, fetcher)));
   if (results.some((r) => r.ok)) return { ok: true, via: "account" };
-  return { ok: false, detail: `${first.detail} Also tried ${others.map(shown).join(" and ")}.` };
+  return { ok: false, detail: `${first.detail} Also tried ${others.map(shown).join(" and ")}. ${FRESH_FILE_HINT}` };
 }
 
 /**

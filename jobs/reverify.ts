@@ -8,6 +8,7 @@ import { resolveTxt } from "@/lib/dns-txt";
 import { onClaimActivated } from "@/lib/claim-activation";
 import { createGithubAwareFetcher } from "@/lib/github-proof-fetch";
 import { safeFetcher } from "@/lib/safe-fetch";
+import { saveMonthlySnapshot, type SnapshotOutcome } from "@/lib/top-queries";
 import type { ClaimCheckResult, ClaimStatus } from "@/lib/types";
 
 export interface ActiveClaim {
@@ -78,6 +79,8 @@ export interface ReverifyDeps {
   onRecovered?: (identity: string) => Promise<void>;
   /** Removes orphan tools; returns how many. */
   prune?: () => Promise<number>;
+  /** Freezes last month's Top builders on the first day of a month. */
+  snapshot?: (now: Date) => Promise<SnapshotOutcome>;
   now?: () => Date;
   concurrency?: number;
 }
@@ -91,6 +94,8 @@ export interface ReverifyReport {
   /** Stale claims that passed again and went back to active. */
   recovered: number;
   pruned: number;
+  /** Set only on the run that saved the monthly Top builders snapshot. */
+  snapshot?: "saved";
 }
 
 // Same reader as the claim flow: raw contents with the token, not the API's JSON envelope.
@@ -139,6 +144,13 @@ export async function runReverify(overrides: Partial<ReverifyDeps> = {}): Promis
   const report: ReverifyReport = { checked: 0, ok: 0, failedOnce: 0, staled: 0, skipped: 0, recovered: 0, pruned: 0 };
   const size = deps.concurrency ?? 5;
   const now = (deps.now ?? (() => new Date()))();
+
+  // First, so the snapshot sees the claims as the month ended and not as this run leaves them.
+  try {
+    if ((await (deps.snapshot ?? saveMonthlySnapshot)(now)) === "saved") report.snapshot = "saved";
+  } catch {
+    // Retried by the next run of the day; it must not stop the verification.
+  }
 
   const one = async (c: ActiveClaim) => {
     let res: ClaimCheckResult;

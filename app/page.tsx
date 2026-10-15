@@ -4,18 +4,21 @@ import { KpiStrip } from "@/components/KpiStrip";
 import { Leaderboard } from "@/components/Leaderboard";
 import { Odometer } from "@/components/Odometer";
 import { StatusStack } from "@/components/StatusStack";
+import { TopBuilders, TopComingSoon } from "@/components/TopBuilders";
 import type { Metadata } from "next";
 import { getLeaderboard, getStats, getTools } from "@/lib/queries";
 import { pageMetadata } from "@/lib/seo";
+import { getTopBoard } from "@/lib/top-queries";
 
 export const metadata: Metadata = pageMetadata({ path: "/" });
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const [stats, board, unclaimed] = await Promise.all([
+  const [stats, board, unclaimed, top] = await Promise.all([
     getStats(),
     getLeaderboard({ pageSize: 100 }),
     getTools({ status: "unclaimed" }),
+    getTopBoard(),
   ]);
   const rows = board.items;
   return (
@@ -37,6 +40,17 @@ export default async function Home() {
           <CategoryBars byCategory={stats.byCategory} />
           <StatusStack claimed={stats.toolsClaimed} unclaimed={stats.toolsUnclaimed} />
         </div>
+      </section>
+
+      <section className="sec" id="top" aria-labelledby="top-h">
+        <div className="sec-head">
+          <div>
+            <h2 id="top-h">Top builders</h2>
+            <p>Validators ranked by the tools they have signed. Unclaimed tools do not count.</p>
+          </div>
+          {top.visible && <Link className="linkplain" href="/top">Full ranking and archive</Link>}
+        </div>
+        {top.visible ? <TopBuilders entries={top.entries} /> : <TopComingSoon />}
       </section>
 
       <Leaderboard rows={rows} unclaimed={unclaimed} />

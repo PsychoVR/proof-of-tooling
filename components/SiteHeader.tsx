@@ -7,6 +7,7 @@ import { CLUSTER_SCOPE_LABEL } from "@/lib/clusters";
 
 const LINKS = [
   { href: "/", label: "Ledger" },
+  { href: "/top", label: "Top builders" },
   { href: "/claim", label: "Claim a tool" },
   { href: "/registry", label: "Registry" },
 ];

@@ -229,3 +229,16 @@ export const claimFailures = mysqlTable(
   },
   (t) => [index("claim_failures_created_idx").on(t.createdAt)],
 );
+
+/**
+ * Frozen "Top tool builders" ranking of a finished month (`YYYY-MM`), saved by the daily job on the first
+ * day of the next month. Never updated afterwards: later claims, unclaims or renames do not change it.
+ */
+export const topSnapshots = mysqlTable("top_snapshots", {
+  month: varchar("month", { length: 7 }).primaryKey(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  /** Validators with an active claim when the snapshot was taken. */
+  validators: int("validators").notNull(),
+  /** JSON array of { rank, identity, name, toolCount, firstClaimAt }. */
+  entries: text("entries").notNull(),
+});

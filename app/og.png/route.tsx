@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { ImageResponse } from "next/og";
 import { getStats } from "@/lib/queries";
+import { fonts } from "@/lib/og-fonts";
 import { OG_CACHE_CONTROL, OG_FALLBACK_CACHE_CONTROL, OG_HEIGHT, OG_MEMO_MS, OG_WIDTH, odometerDigits } from "@/lib/og";
 import { SITE_NAME, TAGLINE } from "@/lib/seo";
 
@@ -11,24 +12,6 @@ export const dynamic = "force-dynamic";
 // Colours and type follow the dark theme of the design prototype (tokens), so the card matches the site.
 const C = { bg: "#0f1514", surface: "#151d1b", line: "#26332f", fg: "#e7ecea", muted: "#8fa09a", accent: "#00ff8b", digitBg: "#0a0e0d", digitFg: "#14f195", accentInk: "#000" };
 const GRAD = "linear-gradient(to top right, #14f195 0%, #22a7bc 50%, #9945ff 100%)";
-
-// Font files live in the repository (assets/fonts, OFL): nothing is downloaded at build or run time.
-const FONT_DIR = path.join(process.cwd(), "assets", "fonts");
-const fonts = (() => {
-  let cached: Promise<{ name: string; data: Buffer; weight: 500 | 700 | 800; style: "normal" }[]> | undefined;
-  return () =>
-    (cached ??= Promise.all([
-      readFile(path.join(FONT_DIR, "BigShoulders-800.woff")),
-      readFile(path.join(FONT_DIR, "HankenGrotesk-500.woff")),
-      readFile(path.join(FONT_DIR, "HankenGrotesk-700.woff")),
-      readFile(path.join(FONT_DIR, "JetBrainsMono-500.woff")),
-    ]).then(([display, body500, body700, mono]) => [
-      { name: "Display", data: display, weight: 800 as const, style: "normal" as const },
-      { name: "Body", data: body500, weight: 500 as const, style: "normal" as const },
-      { name: "Body", data: body700, weight: 700 as const, style: "normal" as const },
-      { name: "Mono", data: mono, weight: 500 as const, style: "normal" as const },
-    ]));
-})();
 
 // Small mark for the corner of the card, inlined once as a data URI (the renderer cannot fetch relative URLs).
 const logo = (() => {

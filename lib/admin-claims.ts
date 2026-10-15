@@ -7,6 +7,7 @@ import { authGate } from "@/lib/auth-throttle";
 import { adminAuthorized } from "@/lib/admin-auth";
 import { checkProofFile } from "@/lib/claims";
 import { resolveTxt } from "@/lib/dns-txt";
+import { onClaimActivated } from "@/lib/claim-activation";
 import { createGithubAwareFetcher } from "@/lib/github-proof-fetch";
 import { safeFetcher } from "@/lib/safe-fetch";
 import { sanitizeText } from "@/lib/text";
@@ -38,6 +39,8 @@ export interface AdminClaimsDeps {
   checkProof: (toolUrl: string, identity: string) => Promise<ClaimCheckResult>;
   /** Applies the decision and records it atomically; false when the row changed or is no longer pending. */
   apply: (c: PendingClaim, decision: Decision, actor: string) => Promise<boolean>;
+  /** Called after an approval: the validator now has an active claim (fetch its icon and pools). Must not throw. */
+  activated?: (identity: string) => void;
 }
 
 const selectPending = () =>
@@ -80,6 +83,7 @@ export async function listPendingClaims(opts: { limit?: number; offset?: number 
 export const adminDbDeps: AdminClaimsDeps = {
   loadClaim: async (id) => (await selectPending().where(eq(claims.id, id)).limit(1))[0] ?? null,
   checkProof: (toolUrl, identity) => checkProofFile(toolUrl, identity, createGithubAwareFetcher(safeFetcher), resolveTxt),
+  activated: (identity) => void onClaimActivated(identity),
   apply: (c, decision, actor) =>
     getDb().transaction(async (tx) => {
       const [res] = await tx
@@ -121,6 +125,7 @@ export async function decideClaim(
     if (!proof.ok) return { ok: false, code: "proof_invalid", detail: proof.detail };
   }
   if (!(await deps.apply(claim, decision, opts.actor))) return { ok: false, code: "precondition_failed" };
+  if (decision === "approve") deps.activated?.(claim.identity); // icon and stake badges appear now, not tomorrow
   return { ok: true, id, status: decision === "approve" ? "active" : "rejected" };
 }
 

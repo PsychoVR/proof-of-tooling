@@ -155,10 +155,14 @@ describe("pools job against the database (simulated RPC)", () => {
     expect(scan.epoch).toBe(2);
   });
 
-  it("drops everything stored for a validator when it loses its active claim", async () => {
+  it("keeps the stored data of a validator whose claim went stale less than 30 days ago, and drops it after that", async () => {
     await runPools(deps(rpcFetch()));
     expect(await getDb().select().from(validatorSfdp)).toHaveLength(2);
-    await getDb().update(claims).set({ status: "stale" }).where(eq(claims.identity, V.overclock.identity));
+    await getDb().update(claims).set({ status: "stale", lastCheckedAt: new Date() }).where(eq(claims.identity, V.overclock.identity));
+    const kept = await runPools(deps(rpcFetch()));
+    expect(kept.removed).toBe(0);
+    expect(await getDb().select().from(validatorSfdp)).toHaveLength(2);
+    await getDb().update(claims).set({ lastCheckedAt: new Date(Date.now() - 31 * 86_400_000) }).where(eq(claims.identity, V.overclock.identity));
     const r = await runPools(deps(rpcFetch()));
     expect(r.removed).toBeGreaterThan(0);
     expect(await stored(V.overclock.identity)).toEqual([]);

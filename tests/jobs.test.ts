@@ -70,7 +70,7 @@ describe("runReverify", () => {
     // network errors touch nothing: no failure recorded, no stale
     expect(markFailed).toHaveBeenCalledTimes(1);
     expect(markStale).toHaveBeenCalledTimes(1);
-    expect(report).toEqual({ checked: 3, ok: 1, failedOnce: 1, staled: 1, skipped: 2, pruned: 2 });
+    expect(report).toEqual({ checked: 3, ok: 1, failedOnce: 1, staled: 1, skipped: 2, recovered: 0, pruned: 2 });
   });
 
   it("a claim that failed, was unreachable once and then failed again is stale only after 2 real failures", async () => {

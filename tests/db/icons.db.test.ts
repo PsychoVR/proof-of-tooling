@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { getDb } from "@/db";
 import { DEV_VALIDATORS as V, resetDevDb, seedDevData } from "@/db/dev-data";
-import { validatorIcons, validators } from "@/db/schema";
+import { claims, validatorIcons, validators } from "@/db/schema";
 import { defaultIconDeps, refreshIconFor, runIcons } from "@/jobs/icons";
 import { getLeaderboard, getValidatorProfile } from "@/lib/queries";
 
@@ -67,6 +67,28 @@ describe("validator icons", () => {
     await run();
     await setIconUrl(V.pumpkin.identity, null);
     expect(await runIcons({ ...defaultIconDeps, fetchIcon: async () => ({ status: 200, body: PNG }) })).toMatchObject({ checked: 0, removed: 1 });
+  });
+
+  it("keeps a stale validator's icon hidden for 30 days, shows it again at once on recovery, and drops it after 30 days", async () => {
+    const id = V.pumpkin.identity;
+    await setIconUrl(id, "https://pumpkin.example/i.png");
+    await runIcons({ ...defaultIconDeps, fetchIcon: async () => ({ status: 200, body: PNG }) });
+    const run = () => runIcons({ ...defaultIconDeps, fetchIcon: async () => ({ status: 200, body: PNG }) });
+    const iconOf = async () => (await getLeaderboard({})).items.find((r) => r.validator.identity === id)?.validator.iconUrl ?? null;
+    const setClaims = (status: "active" | "stale", checked: Date) => getDb().update(claims).set({ status, lastCheckedAt: checked }).where(eq(claims.identity, id));
+
+    await setClaims("stale", new Date());
+    expect(await run()).toMatchObject({ checked: 0, removed: 0 });
+    expect(await getDb().select().from(validatorIcons)).toHaveLength(1);
+    expect(await iconOf()).toBeNull(); // hidden while no claim is active
+    expect((await getValidatorProfile(id))!.validator.iconUrl).toBeNull();
+
+    await setClaims("active", new Date());
+    expect(await iconOf()).toBe(`/api/validators/${id}/icon`); // back at once, no download needed
+
+    await setClaims("stale", new Date(Date.now() - 31 * 86_400_000));
+    expect(await run()).toMatchObject({ removed: 1 });
+    expect(await getDb().select().from(validatorIcons)).toHaveLength(0);
   });
 
   it("the third-party url never shows up in the profile", async () => {

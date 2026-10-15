@@ -122,9 +122,9 @@ describe("pruneOrphanTools and the failure counter (V4, B6)", () => {
     for (let i = 0; i < 6; i++) await save(`l6site${i}.com`, id);
     await getDb().execute(sql`UPDATE claims SET verified_at = NOW() - INTERVAL 3 DAY WHERE identity = ${id}`);
     await runReverify({ check: async () => ({ id: "proof" as const, ok: true }), prune: async () => 0 });
-    // the seed also gives this identity a stale claim, which the job never touches
+    // the seed also gives this identity a stale claim: it passes the check too and goes back to active
     const rows = await getDb().select().from(claims).where(and(eq(claims.identity, id), eq(claims.status, "active")));
-    expect(rows).toHaveLength(6);
+    expect(rows).toHaveLength(7);
     expect(rows.every((r) => r.lastCheckedAt !== null && r.failures === 0)).toBe(true);
     // The 7th new claim is not sent to review for "more than 5 in 24 hours".
     expect(await save("l6new.com", id, { recheck: { now: new Date() } })).toMatchObject({ status: "active" });

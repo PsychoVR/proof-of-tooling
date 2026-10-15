@@ -5,6 +5,7 @@ import { pruneOrphanTools } from "@/jobs/prune";
 import { pruneClaimFailures } from "@/lib/claim-failures";
 import { checkProofFile, proofFileUrl, type Fetcher, type TxtResolver } from "@/lib/claims";
 import { resolveTxt } from "@/lib/dns-txt";
+import { onClaimActivated } from "@/lib/claim-activation";
 import { createGithubAwareFetcher } from "@/lib/github-proof-fetch";
 import { safeFetcher } from "@/lib/safe-fetch";
 import type { ClaimCheckResult, ClaimStatus } from "@/lib/types";
@@ -73,6 +74,8 @@ export interface ReverifyDeps {
   markFailed: (id: number, now: Date, failures: number) => Promise<void>;
   /** Turns the claim stale, only if it is still active with `readFailures` failures (the value that was read). */
   markStale: (id: number, now: Date, readFailures: number) => Promise<void>;
+  /** A stale claim passed again and is active: fetch its icon and rescan its pools now. */
+  onRecovered?: (identity: string) => Promise<void>;
   /** Removes orphan tools; returns how many. */
   prune?: () => Promise<number>;
   now?: () => Date;
@@ -85,6 +88,8 @@ export interface ReverifyReport {
   failedOnce: number;
   staled: number;
   skipped: number;
+  /** Stale claims that passed again and went back to active. */
+  recovered: number;
   pruned: number;
 }
 
@@ -92,6 +97,7 @@ export interface ReverifyReport {
 const githubAwareFetcher = createGithubAwareFetcher(safeFetcher);
 
 const defaults: ReverifyDeps = {
+  onRecovered: onClaimActivated,
   listActive: async () =>
     getDb()
       .select({
@@ -130,7 +136,7 @@ const defaults: ReverifyDeps = {
 export async function runReverify(overrides: Partial<ReverifyDeps> = {}): Promise<ReverifyReport> {
   const deps: ReverifyDeps = { ...defaults, ...overrides };
   const list = await deps.listActive();
-  const report: ReverifyReport = { checked: 0, ok: 0, failedOnce: 0, staled: 0, skipped: 0, pruned: 0 };
+  const report: ReverifyReport = { checked: 0, ok: 0, failedOnce: 0, staled: 0, skipped: 0, recovered: 0, pruned: 0 };
   const size = deps.concurrency ?? 5;
   const now = (deps.now ?? (() => new Date()))();
 
@@ -147,6 +153,14 @@ export async function runReverify(overrides: Partial<ReverifyDeps> = {}): Promis
     if (res.ok) {
       await deps.markOk(c.id, now);
       report.ok++;
+      if (c.status === "stale") {
+        report.recovered++;
+        try {
+          await deps.onRecovered?.(c.identity);
+        } catch {
+          // Best effort: the daily jobs pick the validator up anyway.
+        }
+      }
     } else if (c.status === "stale") {
       // Already stale: nothing to demote, keep it listed for the next run.
       return;

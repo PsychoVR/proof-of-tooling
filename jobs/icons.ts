@@ -2,6 +2,7 @@ import { and, asc, eq, exists, inArray, isNotNull, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { claims, validatorIcons, validators } from "@/db/schema";
 import { ENABLED_CLUSTERS } from "@/lib/clusters";
+import { retainedIdentities } from "@/lib/retention";
 import { createSafeBinaryFetcher } from "@/lib/safe-fetch";
 import { iconEtag, MAX_ICON_BYTES, sniffIconType, type IconType } from "@/lib/validator-icons";
 
@@ -21,6 +22,8 @@ export interface IconDeps {
   iconUrlOf: (identity: string) => Promise<string | null>;
   fetchIcon: (url: string) => Promise<{ status: number; body: Buffer }>;
   save: (identity: string, icon: { contentType: IconType; bytes: Buffer; etag: string }) => Promise<void>;
+  /** Identities whose stored icon must be kept even though they are not targets now (claim stale for less than 30 days). */
+  retained?: () => Promise<string[]>;
   /** Drops stored icons of identities that are no longer targets, plus the given ones. Returns how many rows went. */
   remove: (opts: { keep: string[]; also: string[] }) => Promise<number>;
 }
@@ -38,6 +41,7 @@ export interface IconReport {
 const db = () => getDb();
 
 export const defaultIconDeps: IconDeps = {
+  retained: () => retainedIdentities(),
   async targets() {
     const rows = await db()
       .select({ identity: validators.identity, iconUrl: validators.iconUrl })
@@ -144,6 +148,7 @@ export async function runIcons(deps: IconDeps = defaultIconDeps): Promise<IconRe
   };
   await Promise.all(Array.from({ length: Math.min(POOL, batch.length) }, worker));
 
-  report.removed = await deps.remove({ keep: all.map((t) => t.identity), also: rejected });
+  const retained = deps.retained ? await deps.retained() : [];
+  report.removed = await deps.remove({ keep: [...all.map((t) => t.identity), ...retained], also: rejected });
   return report;
 }

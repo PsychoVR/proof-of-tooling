@@ -25,6 +25,7 @@ import {
   type StakePoolDef,
 } from "@/lib/solana/stake-pools";
 import type { Fetcher } from "@/lib/claims";
+import { retainedIdentities } from "@/lib/retention";
 import { shortError, type StepError } from "@/lib/job-errors";
 
 const HOUR = 3_600_000;
@@ -108,6 +109,8 @@ export interface PoolsDeps {
   remove: (keep: string[]) => Promise<number>;
   /** Stores when the run happened and which steps failed, so the last result can be read from the database. Best effort. */
   recordRun?: (report: PoolsReport) => Promise<void>;
+  /** Identities whose stored data must be kept even though they are not scanned now (claim stale for less than 30 days). */
+  retained?: () => Promise<string[]>;
 }
 
 export type MeasuredCandidate = PoolCandidate & CandidateMeasure;
@@ -247,7 +250,8 @@ async function runSteps(deps: PoolsDeps, opts: RunOptions): Promise<PoolsReport>
 
   if (!opts.only) {
     try {
-      report.removed = await deps.remove(all.map((t) => t.identity));
+      const retained = deps.retained ? await deps.retained() : [];
+      report.removed = await deps.remove([...all.map((t) => t.identity), ...retained]);
     } catch (err) {
       fail("cleanup", err);
     }
@@ -415,6 +419,7 @@ const chunks = <T>(list: readonly T[], size: number): T[][] => {
 
 export const defaultPoolsDeps: PoolsDeps = {
   now: () => new Date(),
+  retained: () => retainedIdentities(),
   async targets() {
     const rows = await db()
       .select({ identity: validators.identity, voteAccount: validators.voteAccount, scannedAt: validatorPoolScan.scannedAt })

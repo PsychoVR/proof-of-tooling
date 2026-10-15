@@ -87,7 +87,9 @@ async function withClaims(toolRows: ToolRow[]): Promise<ToolWithClaims[]> {
         .from(validators)
         .where(inArray(validators.identity, ids))
     : [];
-  const icons = await withIcons(ids);
+  // Icons show only for validators with an active claim; a stale claim keeps the stored icon hidden until it recovers.
+  const activeIds = new Set(claimRows.filter((c) => c.status === "active").map((c) => c.identity));
+  const icons = await withIcons(ids.filter((id) => activeIds.has(id)));
   return buildToolsWithClaims(toolRows, claimRows, names.map((n) => ({ ...n, hasIcon: icons.has(n.identity) })), seeds);
 }
 
@@ -125,6 +127,7 @@ export async function getLeaderboard(opts: {
 
   const identities = [...new Set(liveClaims.map((c) => c.identity))];
   if (identities.length === 0) return { items: [], page, pageSize, total: 0 };
+  const verified = new Set(liveClaims.filter((c) => c.status === "active").map((c) => c.identity));
   const match = inArray(validators.identity, identities);
 
   const validatorRows = await db
@@ -133,9 +136,8 @@ export async function getLeaderboard(opts: {
     .where(and(opts.cluster ? eq(validators.cluster, opts.cluster) : inArray(validators.cluster, [...ENABLED_CLUSTERS]), match))
     .orderBy(desc(validators.activatedStake));
 
-  const built = buildLeaderboard(validatorRows, liveClaims, toolRows, page, pageSize, await withIcons(identities));
-  // Badges only for validators whose claim is active (verified): stale or pending ones show none.
-  const verified = new Set(liveClaims.filter((c) => c.status === "active").map((c) => c.identity));
+  const built = buildLeaderboard(validatorRows, liveClaims, toolRows, page, pageSize, await withIcons(identities.filter((id) => verified.has(id))));
+  // Icons and badges only for validators whose claim is active (verified): stale or pending ones show none.
   const badges = await getPoolBadges(built.items.map((i) => i.validator.identity).filter((id) => verified.has(id)));
   const items = built.items.map((row) => {
     const b = badges.get(row.validator.identity);
@@ -167,9 +169,10 @@ export async function getValidatorProfile(identity: string): Promise<ValidatorPr
   const toolIds = [...new Set(claimed.map((r) => r.toolId))];
   const toolRows = toolIds.length ? await db.select().from(tools).where(inArray(tools.id, toolIds)) : [];
 
-  const badges = claimed.some((c) => c.status === "active") ? (await getPoolBadges([best.identity])).get(best.identity) : undefined;
+  const active = claimed.some((c) => c.status === "active");
+  const badges = active ? (await getPoolBadges([best.identity])).get(best.identity) : undefined;
   return {
-    validator: mapValidator(best, (await withIcons([best.identity])).has(best.identity)),
+    validator: mapValidator(best, active && (await withIcons([best.identity])).has(best.identity)),
     tools: await withClaims(toolRows),
     endorsements: endorsementRows.map(mapEndorsement),
     ...(badges ? { pools: badges.pools, sfdp: badges.sfdp } : {}),

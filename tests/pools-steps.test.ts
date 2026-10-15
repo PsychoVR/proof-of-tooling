@@ -115,4 +115,9 @@ describe("each part of the pools job fails on its own", () => {
     await expect(runPools(makeDeps({ recordRun: boom("db") }).deps)).resolves.toBeDefined();
   });
 
+  it("keeps the data of validators retained after their claim went stale", async () => {
+    const remove = vi.fn(async () => 0);
+    await runPools(makeDeps({ remove, retained: async () => ["STALE1"] }).deps);
+    expect(remove).toHaveBeenCalledWith(expect.arrayContaining(["STALE1", ...targets(3).map((x) => x.identity)]));
+  });
 });

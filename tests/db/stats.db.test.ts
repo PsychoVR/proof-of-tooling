@@ -52,6 +52,7 @@ describe("getAdminStats", () => {
     expect(s.claimsByStatus).toEqual({ active: 3, pending: 1, stale: 1, withdrawn: 0, rejected: 0 });
     expect(s.newClaims).toEqual({ last7Days: 3, last30Days: 4 });
     expect(s.activeIdentities).toBe(2);
+    expect(s.pending).toEqual({ claims: 1, validators: 1 });
     expect(s.claimFailuresLast7Days).toEqual([{ reason: "format", kind: "check", count: 1 }]);
     expect(V.pumpkin.identity).toBeTruthy();
     expect((await getDb().select().from(claims)).length).toBe(5);

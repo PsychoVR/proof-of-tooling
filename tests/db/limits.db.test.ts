@@ -3,6 +3,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { getDb } from "@/db";
 import { DEV_VALIDATORS as V, resetDevDb, seedDevData } from "@/db/dev-data";
 import { claims, tools } from "@/db/schema";
+import { readCounters } from "@/lib/claims-counters";
 import { createClaimsDeps } from "@/lib/claims-deps";
 import { RuleRejectedError, ToolQuotaError, UnknownValidatorError } from "@/lib/claims-service";
 import { MAX_TOOLS_CREATED_PER_IDENTITY } from "@/lib/claims";
@@ -60,6 +61,14 @@ describe("storage guards", () => {
     const s = await Promise.all(Array.from({ length: 12 }, (_, i) => status(`t${i}.big.example.org`, ids[i % 4])));
     expect(s.filter((x) => x === "active")).toHaveLength(10);
     expect(s.filter((x) => x === "pending")).toHaveLength(2);
+  });
+
+  it("the first 5 claims of an identity are automatic, the 6th and later go to review", async () => {
+    const id = V.quiet.identity;
+    for (let i = 0; i < 5; i++) expect(await save(`auto${i}.example.com`, id, { recheck: { now } })).toMatchObject({ status: "active" });
+    expect(await save("auto5.example.com", id, { recheck: { now } })).toMatchObject({ status: "pending" });
+    // another identity still starts from zero
+    expect(await save("auto0b.example.com", V.laine.identity, { recheck: { now } })).toMatchObject({ status: "active" });
   });
 
   it("N6: an identity with 25 active claims sends the next one to review", async () => {
@@ -126,8 +135,9 @@ describe("pruneOrphanTools and the failure counter (V4, B6)", () => {
     const rows = await getDb().select().from(claims).where(and(eq(claims.identity, id), eq(claims.status, "active")));
     expect(rows).toHaveLength(7);
     expect(rows.every((r) => r.lastCheckedAt !== null && r.failures === 0)).toBe(true);
-    // The 7th new claim is not sent to review for "more than 5 in 24 hours".
-    expect(await save("l6new.com", id, { recheck: { now: new Date() } })).toMatchObject({ status: "active" });
+    // The 24h window sees none of them, so the 7th claim is not held for "more than 5 in 24 hours"
+    // (it still goes to review: an identity with 5 active claims is past the automatic limit).
+    expect((await readCounters(getDb(), "l6new.com", id, new Date())).identityClaimsLast24h).toBe(0);
   });
 
   it("L7: the writers do not overwrite a claim that changed since it was read", async () => {

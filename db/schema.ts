@@ -208,6 +208,8 @@ export const claimDecisions = mysqlTable(
     decision: mysqlEnum("decision", ["approve", "reject"]).notNull(),
     previousStatus: mysqlEnum("previous_status", CLAIM_STATUSES).notNull(),
     actor: varchar("actor", { length: 64 }).notNull(),
+    /** Why the admin decided so (always set for batch decisions). */
+    reason: varchar("reason", { length: 255 }),
     decidedAt: timestamp("decided_at").defaultNow().notNull(),
   },
   (t) => [index("claim_decisions_claim_idx").on(t.claimId)],

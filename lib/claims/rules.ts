@@ -40,6 +40,8 @@ export const MIN_AGE_DAYS = 7;
 /** Own commits a fork needs; fewer (but more than none) go to review. */
 export const MIN_FORK_OWN_COMMITS = 5;
 export const MAX_CLAIMS_PER_DAY = 5;
+/** Active claims of one identity that are approved automatically; from the next one on every claim is reviewed by hand. */
+export const MAX_AUTO_ACTIVE_PER_IDENTITY = 5;
 /** Active claims one identity may hold before new ones need a review. */
 export const MAX_ACTIVE_PER_IDENTITY = 25;
 /** Claims of all identities together under one registrable domain before new ones need a review. */
@@ -77,7 +79,11 @@ function abuseReviews(ctx: RuleContext): string[] {
     reviews.push(`More than ${MAX_CLAIMS_PER_DAY} claims from this identity in 24 hours.`);
   }
   if (ctx.otherClaimants > 0) reviews.push("URL also claimed by other validators.");
-  if ((ctx.identityActiveClaims ?? 0) >= MAX_ACTIVE_PER_IDENTITY) {
+  const active = ctx.identityActiveClaims ?? 0;
+  if (active >= MAX_AUTO_ACTIVE_PER_IDENTITY) {
+    reviews.push(`Only the first ${MAX_AUTO_ACTIVE_PER_IDENTITY} claims of an identity are approved automatically.`);
+  }
+  if (active >= MAX_ACTIVE_PER_IDENTITY) {
     reviews.push(`This identity already holds ${MAX_ACTIVE_PER_IDENTITY} or more active claims.`);
   }
   return reviews;

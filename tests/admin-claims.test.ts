@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { claimEtag, decideClaim, handleDecision, handleListPending, type AdminClaimsDeps } from "@/lib/admin-claims";
+import { claimEtag, decideBatch, decideClaim, handleBatch, handleDecision, handleListPending, type AdminClaimsDeps } from "@/lib/admin-claims";
 import { adminSecret } from "@/lib/admin-auth";
 
 const ADMIN = "a".repeat(32);
@@ -65,7 +65,7 @@ describe("decideClaim", () => {
     const d = deps();
     expect(await decideClaim(7, "approve", { actor: "rafa", ifMatch: etag }, d)).toEqual({ ok: true, id: 7, status: "active" });
     expect(d.checkProof).toHaveBeenCalledWith("github.com/org/tool", claim.identity);
-    expect(d.apply).toHaveBeenCalledWith(expect.objectContaining({ id: 7 }), "approve", "rafa");
+    expect(d.apply).toHaveBeenCalledWith(expect.objectContaining({ id: 7 }), "approve", "rafa", undefined);
     const r = deps({ checkProof: vi.fn(async () => { throw new Error("must not run"); }) });
     expect(await decideClaim(7, "reject", { actor: "rafa", ifMatch: etag }, r)).toEqual({ ok: true, id: 7, status: "rejected" });
   });
@@ -127,10 +127,10 @@ describe("admin HTTP handlers", () => {
   it("sanitizes the actor (bidi controls) and defaults it", async () => {
     const d = deps();
     await handleDecision(req(`Bearer ${ADMIN}`, { "if-match": etag, "x-admin-actor": "ra­fa" }), "7", "approve", d);
-    expect(d.apply).toHaveBeenCalledWith(expect.anything(), "approve", "ra fa");
+    expect(d.apply).toHaveBeenCalledWith(expect.anything(), "approve", "ra fa", undefined);
     const d2 = deps();
     await handleDecision(req(`Bearer ${ADMIN}`, { "if-match": etag }), "7", "reject", d2);
-    expect(d2.apply).toHaveBeenCalledWith(expect.anything(), "reject", "admin");
+    expect(d2.apply).toHaveBeenCalledWith(expect.anything(), "reject", "admin", undefined);
   });
 
   it("returns a generic 500 and logs only the message when something throws", async () => {
@@ -141,5 +141,61 @@ describe("admin HTTP handlers", () => {
     expect(JSON.stringify(await res.json())).not.toContain("hunter2");
     expect(JSON.stringify(log.mock.calls)).not.toContain("SECRET SQL");
     log.mockRestore();
+  });
+});
+
+describe("batch decisions", () => {
+  const second = { ...claim, id: 8, toolId: 4 };
+  const batchDeps = (apply = vi.fn(async () => true)) =>
+    deps({ loadClaim: async (id: number) => (id === 7 ? claim : id === 8 ? second : null), apply });
+  const items = [{ id: 7, etag }, { id: 8, etag: claimEtag(second) }];
+
+  it("decides several claims, passes the reason and keeps going when one fails", async () => {
+    const apply = vi.fn(async () => true);
+    const r = await decideBatch("approve", [...items, { id: 9, etag }], { actor: "rafa", reason: "same operator" }, batchDeps(apply));
+    expect(r).toMatchObject({ decided: 2, failed: 1 });
+    expect(r.results.map((x) => x.ok)).toEqual([true, true, false]);
+    expect(apply).toHaveBeenCalledTimes(2);
+    expect(apply).toHaveBeenCalledWith(expect.objectContaining({ id: 8 }), "approve", "rafa", "same operator");
+  });
+
+  it("rejects in batch without checking the proofs", async () => {
+    const d = batchDeps();
+    const r = await decideBatch("reject", items, { actor: "a", reason: "spam" }, d);
+    expect(r).toMatchObject({ decided: 2, failed: 0 });
+    expect(d.checkProof).not.toHaveBeenCalled();
+  });
+
+  describe("HTTP", () => {
+    beforeEach(() => {
+      process.env.CRON_SECRET = CRON;
+      process.env.ADMIN_SECRET = ADMIN;
+      process.env.DATABASE_URL = "mysql://u:p@localhost:3306/db";
+    });
+    let n = 0;
+    const post = (body: unknown, auth: string | null = `Bearer ${ADMIN}`) =>
+      new Request("http://x/api/admin/claims/batch", {
+        method: "POST",
+        headers: { "x-forwarded-for": `41.0.${++n >> 8}.${n & 255}`, ...(auth ? { authorization: auth } : {}) },
+        body: typeof body === "string" ? body : JSON.stringify(body),
+      });
+    const good = { decision: "approve", reason: "checked", claims: items };
+
+    it("requires the admin secret", async () => {
+      expect((await handleBatch(post(good, null), batchDeps())).status).toBe(401);
+      expect((await handleBatch(post(good, `Bearer ${CRON}`), batchDeps())).status).toBe(401);
+    });
+
+    it("validates the body", async () => {
+      for (const bad of ["{", { ...good, decision: "x" }, { ...good, reason: " " }, { ...good, reason: undefined }, { ...good, claims: [] }, { ...good, claims: [{ id: 7, etag: "bad" }] }, { ...good, claims: [items[0], items[0]] }, { ...good, claims: Array.from({ length: 51 }, (_, i) => ({ id: i + 1, etag })) }]) {
+        expect((await handleBatch(post(bad), batchDeps())).status).toBe(400);
+      }
+    });
+
+    it("returns one result per claim", async () => {
+      const res = await handleBatch(post(good), batchDeps());
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ decision: "approve", decided: 2, failed: 0 });
+    });
   });
 });

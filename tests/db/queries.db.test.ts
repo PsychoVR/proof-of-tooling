@@ -3,7 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { getDb } from "@/db";
 import { CLI_IDENTITY, DEV_VALIDATORS as V, resetDevDb, seedDevData } from "@/db/dev-data";
 import { claimDecisions, claims, seedEntries, tools, validators as validatorsTable } from "@/db/schema";
-import { adminDbDeps, decideClaim, listPendingClaims } from "@/lib/admin-claims";
+import { adminDbDeps, decideBatch, decideClaim, listPendingByValidator, listPendingClaims } from "@/lib/admin-claims";
 import { createClaimsDeps } from "@/lib/claims-deps";
 import { processClaim } from "@/lib/claims-service";
 import { getLeaderboard, getRegistry, getStats, getToolBySlug, getTools, getValidatorProfile } from "@/lib/queries";
@@ -332,6 +332,25 @@ describe("moderation on MariaDB", () => {
     await getDb().update(claims).set({ message: `${p.message} ` }).where(eq(claims.id, p.id));
     expect(await decideClaim(p.id, "reject", { actor: "a", ifMatch: p.etag }, okProof)).toEqual({ ok: false, code: "precondition_failed" });
     expect((await listPendingClaims()).items[0].id).toBe(p.id);
+  });
+
+  it("groups pending claims by validator and decides several at once with a reason", async () => {
+    const insert = async (identity: string, i: number) => {
+      const [t] = await getDb().insert(tools).values({ slug: `grp-${i}`, url: `grp${i}.example.com`, name: "G", category: "Library", kind: "web" }).$returningId();
+      await getDb().insert(claims).values({ toolId: t.id, identity, cluster: "mainnet", message: `m${i}`, signature: "s", signedDate: "2026-10-07", status: "pending", verifiedAt: new Date() });
+    };
+    await insert(V.quiet.identity, 1);
+    await insert(V.quiet.identity, 2);
+    const grouped = await listPendingByValidator();
+    expect(grouped.total).toBe(3);
+    expect(grouped.groups.map((g) => [g.identity, g.claims.length])).toEqual([[V.blockLogic.identity, 1], [V.quiet.identity, 2]]);
+    const mine = grouped.groups[1].claims.map((c) => ({ id: c.id, etag: c.etag }));
+    const r = await decideBatch("reject", mine, { actor: "rafa", reason: "same operator, fragmented" }, okProof);
+    expect(r).toMatchObject({ decided: 2, failed: 0 });
+    expect((await listPendingClaims()).total).toBe(1);
+    const log = await getDb().select().from(claimDecisions);
+    expect(log).toHaveLength(2);
+    expect(log.every((l) => l.reason === "same operator, fragmented" && l.actor === "rafa")).toBe(true);
   });
 
   it("reject does not need the proof file and is audited", async () => {

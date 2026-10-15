@@ -1,0 +1,1 @@
+ALTER TABLE `claim_decisions` ADD `reason` varchar(255);

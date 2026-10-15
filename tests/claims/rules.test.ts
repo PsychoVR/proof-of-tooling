@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_ACTIVE_PER_IDENTITY, MAX_CLAIMS_PER_DOMAIN_TOTAL, MAX_TOOLS_PER_DOMAIN, MIN_FORK_OWN_COMMITS, evaluateRepoRules, evaluateWebRules, type RepoMetadata, type RuleContext } from "@/lib/claims";
+import { MAX_ACTIVE_PER_IDENTITY, MAX_AUTO_ACTIVE_PER_IDENTITY, MAX_CLAIMS_PER_DOMAIN_TOTAL, MAX_TOOLS_PER_DOMAIN, MIN_FORK_OWN_COMMITS, evaluateRepoRules, evaluateWebRules, type RepoMetadata, type RuleContext } from "@/lib/claims";
 
 const NOW = new Date("2026-10-07T00:00:00Z");
 const repo: RepoMetadata = {
@@ -36,9 +36,17 @@ describe("evaluateRepoRules", () => {
     expect(evaluateRepoRules({ ...repo, isFork: false, ownCommits: 0 }, ctx).decision).toBe("accept");
   });
 
-  it("caps active claims per identity for repos too (N6)", () => {
-    expect(evaluateRepoRules(repo, { ...ctx, identityActiveClaims: MAX_ACTIVE_PER_IDENTITY - 1 }).decision).toBe("accept");
-    expect(evaluateRepoRules(repo, { ...ctx, identityActiveClaims: MAX_ACTIVE_PER_IDENTITY }).decision).toBe("review");
+  it("approves the first 5 claims of an identity automatically and sends the 6th to review", () => {
+    expect(MAX_AUTO_ACTIVE_PER_IDENTITY).toBe(5);
+    for (let active = 0; active < 5; active++) expect(evaluateRepoRules(repo, { ...ctx, identityActiveClaims: active }).decision).toBe("accept");
+    const sixth = evaluateRepoRules(repo, { ...ctx, identityActiveClaims: 5 });
+    expect(sixth.decision).toBe("review");
+    expect(sixth.reasons.join(" ")).toContain("first 5 claims");
+  });
+
+  it("keeps the 25 active claims cap as its own reason (N6)", () => {
+    expect(evaluateRepoRules(repo, { ...ctx, identityActiveClaims: MAX_ACTIVE_PER_IDENTITY - 1 }).reasons.join(" ")).not.toContain("25 or more");
+    expect(evaluateRepoRules(repo, { ...ctx, identityActiveClaims: MAX_ACTIVE_PER_IDENTITY }).reasons.join(" ")).toContain("25 or more");
   });
 
   it("collects every reject reason, and reject wins over review", () => {
@@ -102,9 +110,10 @@ describe("evaluateWebRules", () => {
     expect(out.reasons.join(" ")).toContain("This domain");
   });
 
-  it("caps active claims per identity (N6)", () => {
-    expect(evaluateWebRules({ ...web, identityActiveClaims: MAX_ACTIVE_PER_IDENTITY - 1 }).decision).toBe("accept");
-    expect(evaluateWebRules({ ...web, identityActiveClaims: MAX_ACTIVE_PER_IDENTITY }).decision).toBe("review");
+  it("approves 5 web claims automatically, the 6th goes to review, and the 25 cap is its own reason", () => {
+    expect(evaluateWebRules({ ...web, identityActiveClaims: MAX_AUTO_ACTIVE_PER_IDENTITY - 1 }).decision).toBe("accept");
+    expect(evaluateWebRules({ ...web, identityActiveClaims: MAX_AUTO_ACTIVE_PER_IDENTITY }).decision).toBe("review");
+    expect(evaluateWebRules({ ...web, identityActiveClaims: MAX_ACTIVE_PER_IDENTITY }).reasons.join(" ")).toContain("25 or more");
   });
 
   it("collects several reasons and rejects a duplicate claim by the same identity", () => {

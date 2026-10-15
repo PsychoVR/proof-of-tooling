@@ -64,6 +64,9 @@ describe("processClaim passes the rule inputs to storage and maps its errors (V2
     const save = stored("pending");
     const r = await processClaim(claimMsg("example.com"), setup(save, { identityActiveClaims: 25 }), true);
     expect(r.checks.at(-1)?.detail).toContain("25 or more active claims");
+    const sixth = await processClaim(claimMsg("example.com"), setup(save, { identityActiveClaims: 5 }), true);
+    expect(sixth).toMatchObject({ ok: true, inReview: true });
+    expect(sixth.checks.at(-1)?.detail).toContain("first 5 claims");
     const r2 = await processClaim(claimMsg("example.com"), setup(save, { domainClaimsAllIdentities: 10 }), true);
     expect(r2.checks.at(-1)?.detail).toContain("This domain");
   });

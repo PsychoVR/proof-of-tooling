@@ -38,7 +38,7 @@ const realSeed = async (store: SeedStore, entries?: typeof SEED_TOOLS) => {
 
 describe("seed data", () => {
   it("has canonical, unique urls and unique slugs", () => {
-    expect(SEED_TOOLS).toHaveLength(27);
+    expect(SEED_TOOLS).toHaveLength(308);
     for (const t of SEED_TOOLS) expect(normalizeToolUrl(t.url), t.url).toBe(t.url);
     expect(new Set(SEED_TOOLS.map((t) => t.url)).size).toBe(N);
     expect(new Set(SEED_TOOLS.map((t) => t.slug)).size).toBe(N);

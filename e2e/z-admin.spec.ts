@@ -73,8 +73,8 @@ test("seed endpoint loads the full list once and is idempotent afterwards", asyn
   const first = await request.post("/api/admin/seed", { headers: auth });
   expect(first.status()).toBe(200);
   const body = await first.json();
-  expect(body).toMatchObject({ ok: true, tools: 27, updatedEntries: 0, skippedClaimed: expect.any(Number) });
+  expect(body).toMatchObject({ ok: true, tools: 308, updatedEntries: 0, skippedClaimed: expect.any(Number) });
   expect(body.newTools).toBe(body.newEntries);
   const again = await request.post("/api/admin/seed", { headers: auth });
-  expect(await again.json()).toEqual({ ok: true, tools: 27, newTools: 0, newEntries: 0, updatedEntries: 0, skippedClaimed: body.skippedClaimed });
+  expect(await again.json()).toEqual({ ok: true, tools: 308, newTools: 0, newEntries: 0, updatedEntries: 0, skippedClaimed: body.skippedClaimed });
 });

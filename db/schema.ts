@@ -126,6 +126,8 @@ export const validatorSfdp = mysqlTable("validator_sfdp", {
 export const jobRuns = mysqlTable("job_runs", {
   name: varchar("name", { length: 32 }).primaryKey(),
   lastRunAt: timestamp("last_run_at").defaultNow().notNull(),
+  /** Short summary of the failed steps of that run, null when it went well. */
+  detail: varchar("detail", { length: 255 }),
 });
 
 export const tools = mysqlTable(

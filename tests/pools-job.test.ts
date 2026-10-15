@@ -405,7 +405,7 @@ describe("refreshPoolsFor (right after a claim becomes active)", () => {
         throw new Error("db down");
       },
     };
-    expect(await refreshPoolsFor("x", broken)).toBeNull();
+    expect(await refreshPoolsFor("x", broken)).toMatchObject({ scanned: 0, errors: [{ step: "targets", message: "db down" }] });
   });
 });
 

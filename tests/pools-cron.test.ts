@@ -31,6 +31,14 @@ describe("POST /api/cron/pools", () => {
     expect(await bad.json()).toEqual({ ok: false, error: "job failed" });
   });
 
+  it("answers ok:false with the failed steps and keeps the result when a part failed", async () => {
+    const errors = [{ step: "sfdp", message: "sfdp 500" }];
+    runPools.mockResolvedValueOnce({ scanned: 2, errors });
+    const res = await post(`Bearer ${SECRET}`);
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ ok: false, error: "job failed", failed: errors, result: { scanned: 2, errors } });
+  });
+
   it("has a long time limit for slow scans", () => {
     expect(route.maxDuration).toBe(300);
   });

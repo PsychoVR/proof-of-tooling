@@ -25,6 +25,7 @@ import {
   type StakePoolDef,
 } from "@/lib/solana/stake-pools";
 import type { Fetcher } from "@/lib/claims";
+import { shortError, type StepError } from "@/lib/job-errors";
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -105,6 +106,8 @@ export interface PoolsDeps {
   saveSfdp: (identities: string[], approved: Set<string> | null) => Promise<void>;
   /** Drops everything stored for identities that are no longer verified. Returns how many rows went. */
   remove: (keep: string[]) => Promise<number>;
+  /** Stores when the run happened and which steps failed, so the last result can be read from the database. Best effort. */
+  recordRun?: (report: PoolsReport) => Promise<void>;
 }
 
 export type MeasuredCandidate = PoolCandidate & CandidateMeasure;
@@ -137,6 +140,8 @@ export interface PoolsReport {
     deferred: number;
   } | null;
   sfdp: { participants: number; ok: boolean } | null;
+  /** Parts that failed (step and short message); the others still ran. Empty when everything worked. */
+  errors: StepError[];
 }
 
 export interface RunOptions {
@@ -152,6 +157,8 @@ const SFDP_RUN = "sfdp";
 /** job_runs row stamped the first time a run sees this registry version; scans older than it are stale. */
 export const REGISTRY_RUN = `registry-v${REGISTRY_VERSION}`;
 const DISCOVERY_RUN = "pool-discovery";
+/** job_runs row with the outcome of the last full run (its `detail` lists the failed steps). */
+export const LAST_RUN = "pools-last";
 
 const emptyReport = (mode: PoolsMode, verified: number): PoolsReport => ({
   mode,
@@ -165,6 +172,7 @@ const emptyReport = (mode: PoolsMode, verified: number): PoolsReport => ({
   epochError: false,
   discovery: null,
   sfdp: null,
+  errors: [],
 });
 
 const registryPoolAddresses = () =>
@@ -177,25 +185,52 @@ const isDue = async (deps: PoolsDeps, name: string, every: number) => {
 
 /**
  * Refreshes which stake pools delegate to each verified validator, which candidate pools exist on chain, and
- * which validators are SFDP participants. One failing validator never stops the others and never erases its
+ * which validators are SFDP participants. Every part fails on its own: the report lists the failed steps in
+ * `errors` and the others still run. One failing validator never stops the others and never erases its
  * previous data. Spends about 10 RPC credits per scanned validator, plus 1 per run for the epoch and 10 per
  * discovered program once a week.
  */
 export async function runPools(deps: PoolsDeps = defaultPoolsDeps, opts: RunOptions = {}): Promise<PoolsReport> {
+  const report = await runSteps(deps, opts);
+  if (!opts.only) {
+    try {
+      await deps.recordRun?.(report);
+    } catch {
+      // Bookkeeping only: the report is also the endpoint's answer.
+    }
+  }
+  return report;
+}
+
+async function runSteps(deps: PoolsDeps, opts: RunOptions): Promise<PoolsReport> {
   const started = Date.now();
   const budgetMs = opts.budgetMs ?? RUN_BUDGET_MS;
-  const stored = await deps.targets();
+  const errors: StepError[] = [];
+  const fail = (step: string, err: unknown) => errors.push({ step, message: shortError(err) });
+
+  let stored: PoolTarget[];
+  try {
+    stored = await deps.targets();
+  } catch (err) {
+    fail("targets", err);
+    return { ...emptyReport("daily", 0), errors };
+  }
   const now = deps.now();
 
   // A new registry version means authorities that older scans never looked for. The first run that sees it stamps
   // the time; every validator scanned before that stamp counts as never scanned (so it is due at once, ahead of the
   // rescan guard and its weekly slot) until a scan after the stamp replaces it. Cheap and needs no migration.
-  let since = await deps.lastRun(REGISTRY_RUN);
-  if (!since) {
-    await deps.markRun(REGISTRY_RUN);
-    since = now;
+  let staleBefore = 0;
+  try {
+    let since = await deps.lastRun(REGISTRY_RUN);
+    if (!since) {
+      await deps.markRun(REGISTRY_RUN);
+      since = now;
+    }
+    staleBefore = since.getTime();
+  } catch (err) {
+    fail("registry", err); // without the stamp, scans are simply not considered stale
   }
-  const staleBefore = since.getTime();
   const all = stored.map((t) => (t.scannedAt && t.scannedAt.getTime() < staleBefore ? { ...t, scannedAt: null } : t));
 
   let mode = modeFor(all.length);
@@ -208,98 +243,147 @@ export async function runPools(deps: PoolsDeps = defaultPoolsDeps, opts: RunOpti
   }
   const report = emptyReport(mode, all.length);
   report.due = due.length;
+  report.errors = errors;
 
-  if (!opts.only) report.removed = await deps.remove(all.map((t) => t.identity));
+  if (!opts.only) {
+    try {
+      report.removed = await deps.remove(all.map((t) => t.identity));
+    } catch (err) {
+      fail("cleanup", err);
+    }
+  }
 
   if (due.length > 0) {
     let epoch: number | null = null;
     try {
       epoch = await deps.epoch();
-    } catch {
+    } catch (err) {
       report.epochError = true;
+      fail("epoch", err);
     }
+    let index: ReturnType<typeof buildAuthorityIndex> | null = null;
     if (epoch !== null) {
-      const index = buildAuthorityIndex(STAKE_POOLS, await deps.approvedPools());
+      try {
+        index = buildAuthorityIndex(STAKE_POOLS, await deps.approvedPools());
+      } catch (err) {
+        fail("approved-pools", err); // scanning without them would erase their badges
+      }
+    }
+    if (epoch !== null && index !== null) {
+      const scanEpoch = epoch;
+      const scanIndex = index;
       let next = 0;
+      let firstError: unknown;
       const worker = async () => {
         while (next < due.length) {
           if (Date.now() - started > budgetMs) return;
           const t = due[next++];
           try {
-            const pools = await deps.scan(t.voteAccount, index, epoch);
-            await deps.saveScan(t.identity, pools, epoch);
+            const pools = await deps.scan(t.voteAccount, scanIndex, scanEpoch);
+            await deps.saveScan(t.identity, pools, scanEpoch);
             report.scanned++;
             if (pools.length > 0) report.withPools++;
-          } catch {
+          } catch (err) {
             report.failed++;
+            firstError ??= err;
           }
         }
       };
       await Promise.all(Array.from({ length: Math.min(POOL, due.length) }, worker));
       report.deferred = Math.max(0, due.length - next);
+      if (report.failed > 0) fail("scan", new Error(`${report.failed} of ${due.length} validators failed: ${shortError(firstError)}`));
     }
   }
   if (opts.only) return report;
 
-  if (await isDue(deps, DISCOVERY_RUN, DISCOVERY_EVERY_MS)) {
-    const seen: PoolCandidate[] = [];
-    let okPrograms = 0;
-    for (const program of DISCOVERY_PROGRAMS) {
-      try {
-        seen.push(...(await deps.discover(program)));
-        okPrograms++;
-      } catch {
-        // The next weekly run tries again; candidates already stored stay.
-      }
-    }
-    // Pools of the static registry are already known; listing them as candidates would only add noise.
-    const known = registryPoolAddresses();
-    const found = seen.filter((c) => !known.has(c.pool));
-    // Pools below 10,000 SOL in total (read for free from the StakePool prefix) cannot qualify: no RPC call for them.
-    const drop = found.filter((c) => !mayQualify(c)).map((c) => c.pool);
-    const worth = found
-      .filter(mayQualify)
-      .sort((a, b) => (a.totalLamports === b.totalLamports ? 0 : (a.totalLamports ?? 0n) > (b.totalLamports ?? 0n) ? -1 : 1));
-    const batch = worth.slice(0, MAX_MEASURED_PER_RUN);
-    const qualified: MeasuredCandidate[] = [];
-    let measured = 0;
-    let failedMeasures = 0;
-    let nextPool = 0;
-    const measureWorker = async () => {
-      while (nextPool < batch.length) {
-        if (Date.now() - started > budgetMs + MEASURE_EXTRA_MS) return;
-        const c = batch[nextPool++];
-        try {
-          const m = await deps.measure(c);
-          measured++;
-          if (m) qualified.push({ ...c, ...m });
-          else drop.push(c.pool);
-        } catch {
-          failedMeasures++; // keep whatever is stored for this pool and retry on the next run
-        }
-      }
-    };
-    if (okPrograms > 0) await Promise.all(Array.from({ length: Math.min(POOL, batch.length) }, measureWorker));
-    const saved = okPrograms > 0 ? await deps.saveCandidates(qualified, drop) : { added: 0, dropped: 0 };
-    const deferred = failedMeasures + Math.max(0, batch.length - nextPool) + (worth.length - batch.length);
-    // A run that could not finish measuring is repeated tomorrow instead of next week.
-    if (okPrograms > 0 && failedMeasures === 0 && nextPool >= batch.length) await deps.markRun(DISCOVERY_RUN);
-    report.discovery = { programs: okPrograms, found: found.length, measured, qualified: qualified.length, ...saved, deferred };
+  try {
+    if (await isDue(deps, DISCOVERY_RUN, DISCOVERY_EVERY_MS)) await discoverCandidates(deps, report, started, budgetMs, fail);
+  } catch (err) {
+    fail("discovery", err);
   }
 
-  if (all.length > 0 && (await isDue(deps, SFDP_RUN, SFDP_EVERY_MS))) {
-    const identities = all.map((t) => t.identity);
-    let approved: Set<string> | null = null;
-    try {
-      approved = await deps.fetchSfdp(identities);
-    } catch {
-      approved = null;
+  try {
+    if (all.length > 0 && (await isDue(deps, SFDP_RUN, SFDP_EVERY_MS))) {
+      const identities = all.map((t) => t.identity);
+      let approved: Set<string> | null = null;
+      try {
+        approved = await deps.fetchSfdp(identities);
+      } catch (err) {
+        fail("sfdp", err);
+      }
+      if (approved === null && !errors.some((e) => e.step === "sfdp")) fail("sfdp", new Error("the SFDP list could not be read"));
+      await deps.saveSfdp(identities, approved);
+      await deps.markRun(SFDP_RUN);
+      report.sfdp = { participants: approved?.size ?? 0, ok: approved !== null };
     }
-    await deps.saveSfdp(identities, approved);
-    await deps.markRun(SFDP_RUN);
-    report.sfdp = { participants: approved?.size ?? 0, ok: approved !== null };
+  } catch (err) {
+    fail("sfdp-save", err);
   }
   return report;
+}
+
+async function discoverCandidates(
+  deps: PoolsDeps,
+  report: PoolsReport,
+  started: number,
+  budgetMs: number,
+  fail: (step: string, err: unknown) => void,
+): Promise<void> {
+  const seen: PoolCandidate[] = [];
+  let okPrograms = 0;
+  for (const program of DISCOVERY_PROGRAMS) {
+    try {
+      seen.push(...(await deps.discover(program)));
+      okPrograms++;
+    } catch (err) {
+      fail(`discovery:${program.slice(0, 6)}`, err); // the next run tries again; candidates already stored stay
+    }
+  }
+  // Pools of the static registry are already known; listing them as candidates would only add noise.
+  const known = registryPoolAddresses();
+  const found = seen.filter((c) => !known.has(c.pool));
+  // Pools below 10,000 SOL in total (read for free from the StakePool prefix) cannot qualify: no RPC call for them.
+  const drop = found.filter((c) => !mayQualify(c)).map((c) => c.pool);
+  const worth = found
+    .filter(mayQualify)
+    .sort((a, b) => (a.totalLamports === b.totalLamports ? 0 : (a.totalLamports ?? 0n) > (b.totalLamports ?? 0n) ? -1 : 1));
+  const batch = worth.slice(0, MAX_MEASURED_PER_RUN);
+  const qualified: MeasuredCandidate[] = [];
+  let measured = 0;
+  let failedMeasures = 0;
+  let firstMeasureError: unknown;
+  let nextPool = 0;
+  const measureWorker = async () => {
+    while (nextPool < batch.length) {
+      if (Date.now() - started > budgetMs + MEASURE_EXTRA_MS) return;
+      const c = batch[nextPool++];
+      try {
+        const m = await deps.measure(c);
+        measured++;
+        if (m) qualified.push({ ...c, ...m });
+        else drop.push(c.pool);
+      } catch (err) {
+        failedMeasures++; // keep whatever is stored for this pool and retry on the next run
+        firstMeasureError ??= err;
+      }
+    }
+  };
+  if (okPrograms > 0) await Promise.all(Array.from({ length: Math.min(POOL, batch.length) }, measureWorker));
+  if (failedMeasures > 0) fail("discovery:measure", new Error(`${failedMeasures} pools failed: ${shortError(firstMeasureError)}`));
+  let saved = { added: 0, dropped: 0 };
+  let storedOk = okPrograms > 0;
+  if (okPrograms > 0) {
+    try {
+      saved = await deps.saveCandidates(qualified, drop);
+    } catch (err) {
+      storedOk = false;
+      fail("discovery:save", err);
+    }
+  }
+  const deferred = failedMeasures + Math.max(0, batch.length - nextPool) + (worth.length - batch.length);
+  // A run that could not finish measuring or saving is repeated tomorrow instead of next week.
+  if (storedOk && failedMeasures === 0 && nextPool >= batch.length) await deps.markRun(DISCOVERY_RUN);
+  report.discovery = { programs: okPrograms, found: found.length, measured, qualified: qualified.length, ...saved, deferred };
 }
 
 /**
@@ -439,6 +523,13 @@ export const defaultPoolsDeps: PoolsDeps = {
         .values(part.map((identity) => ({ identity, participant: approved.has(identity), checkedAt: at, lastOkAt: at })))
         .onDuplicateKeyUpdate({ set: { participant: sql`values(${validatorSfdp.participant})`, checkedAt: at, lastOkAt: at } });
     }
+  },
+  async recordRun(report) {
+    const detail = report.errors.length > 0 ? report.errors.map((e) => `${e.step}: ${e.message}`).join("; ").slice(0, 250) : null;
+    await db()
+      .insert(jobRuns)
+      .values({ name: LAST_RUN, detail })
+      .onDuplicateKeyUpdate({ set: { lastRunAt: sql`CURRENT_TIMESTAMP`, detail } });
   },
   async remove(keep) {
     const keepSet = new Set(keep);

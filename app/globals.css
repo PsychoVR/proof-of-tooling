@@ -158,6 +158,7 @@ td.count { font-family: var(--f-display); font-weight: 800; font-size: 24px; fon
 .stackv { display: flex; flex-direction: column; gap: 14px; }
 .list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .list li { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.list li .tool { white-space: normal; max-width: 100%; }
 .linkplain { text-decoration: underline; text-underline-offset: 3px; }
 .linkplain:hover { color: var(--accent-text); }
 

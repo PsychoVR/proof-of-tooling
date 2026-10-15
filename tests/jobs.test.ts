@@ -150,6 +150,66 @@ describe("checkReachable with several proof methods", () => {
   });
 });
 
+describe("reverify: provider errors and stale recovery", () => {
+  const repoUrl = "github.com/org/repo";
+  const ok = JSON.stringify({ identities: ["i"] });
+
+  it.each([403, 429, 500, 503, 408])("HTTP %i from the provider is inconclusive, not a failed proof", async (status) => {
+    const fetcher = async () => ({ status, body: "" });
+    await expect(checkReachable(repoUrl, "i", fetcher, async () => [])).rejects.toBeInstanceOf(ProofUnreachableError);
+  });
+
+  it("a rate limit on the account-level files leaves the proof unknown too", async () => {
+    const fetcher = async (url: string) =>
+      url.includes("/org/repo/") ? { status: 404, body: "" } : { status: 429, body: "" };
+    await expect(checkReachable(repoUrl, "i", fetcher, async () => [])).rejects.toBeInstanceOf(ProofUnreachableError);
+  });
+
+  it("only a 404 or a file without the identity counts as a failure", async () => {
+    expect(await checkReachable(repoUrl, "i", async () => ({ status: 404, body: "" }), async () => [])).toMatchObject({ ok: false });
+    expect(await checkReachable(repoUrl, "i", async () => ({ status: 200, body: ok }), async () => [])).toMatchObject({ ok: true });
+    expect(await checkReachable(repoUrl, "other", async () => ({ status: 200, body: ok }), async () => [])).toMatchObject({ ok: false });
+  });
+
+  it("an unreachable proof never adds to the failure count nor stales the claim", async () => {
+    const markFailed = vi.fn(async () => {});
+    const markStale = vi.fn(async () => {});
+    const report = await runReverify({
+      listActive: async () => [{ id: 1, toolUrl: repoUrl, identity: "i", failures: 1, status: "active" }],
+      check: (u, i) => checkReachable(u, i, async () => ({ status: 429, body: "" }), async () => []),
+      markOk: async () => {},
+      markFailed,
+      markStale,
+      prune: async () => 0,
+    });
+    expect(markFailed).not.toHaveBeenCalled();
+    expect(markStale).not.toHaveBeenCalled();
+    expect(report).toMatchObject({ checked: 0, skipped: 1, staled: 0 });
+  });
+
+  it("a stale claim that passes again goes back to active; one that still fails stays untouched", async () => {
+    const markOk = vi.fn(async () => {});
+    const markFailed = vi.fn(async () => {});
+    const markStale = vi.fn(async () => {});
+    const report = await runReverify({
+      listActive: async () => [
+        { id: 1, toolUrl: "x.test/1", identity: "i", failures: 2, status: "stale" },
+        { id: 2, toolUrl: "x.test/2", identity: "i", failures: 2, status: "stale" },
+      ],
+      check: async (u) => ({ id: "proof", ok: u.endsWith("/1") }),
+      markOk,
+      markFailed,
+      markStale,
+      prune: async () => 0,
+    });
+    expect(markOk).toHaveBeenCalledTimes(1);
+    expect(markOk).toHaveBeenCalledWith(1, expect.any(Date));
+    expect(markFailed).not.toHaveBeenCalled();
+    expect(markStale).not.toHaveBeenCalled();
+    expect(report).toMatchObject({ ok: 1, staled: 0 });
+  });
+});
+
 describe("github job", () => {
   it("parses repo urls", () => {
     expect(parseRepo("https://github.com/Org/repo")).toEqual({ owner: "org", repo: "repo" });

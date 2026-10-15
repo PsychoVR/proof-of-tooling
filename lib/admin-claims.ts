@@ -7,6 +7,7 @@ import { authGate } from "@/lib/auth-throttle";
 import { adminAuthorized } from "@/lib/admin-auth";
 import { checkProofFile } from "@/lib/claims";
 import { resolveTxt } from "@/lib/dns-txt";
+import { createGithubAwareFetcher } from "@/lib/github-proof-fetch";
 import { safeFetcher } from "@/lib/safe-fetch";
 import { sanitizeText } from "@/lib/text";
 import type { ClaimCheckResult, ClaimStatus } from "@/lib/types";
@@ -78,7 +79,7 @@ export async function listPendingClaims(opts: { limit?: number; offset?: number 
 
 export const adminDbDeps: AdminClaimsDeps = {
   loadClaim: async (id) => (await selectPending().where(eq(claims.id, id)).limit(1))[0] ?? null,
-  checkProof: (toolUrl, identity) => checkProofFile(toolUrl, identity, safeFetcher, resolveTxt),
+  checkProof: (toolUrl, identity) => checkProofFile(toolUrl, identity, createGithubAwareFetcher(safeFetcher), resolveTxt),
   apply: (c, decision, actor) =>
     getDb().transaction(async (tx) => {
       const [res] = await tx

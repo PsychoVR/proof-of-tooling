@@ -1,12 +1,13 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
 import { claims, tools } from "@/db/schema";
 import { pruneOrphanTools } from "@/jobs/prune";
 import { pruneClaimFailures } from "@/lib/claim-failures";
 import { checkProofFile, proofFileUrl, type Fetcher, type TxtResolver } from "@/lib/claims";
 import { resolveTxt } from "@/lib/dns-txt";
+import { createGithubAwareFetcher } from "@/lib/github-proof-fetch";
 import { safeFetcher } from "@/lib/safe-fetch";
-import type { ClaimCheckResult } from "@/lib/types";
+import type { ClaimCheckResult, ClaimStatus } from "@/lib/types";
 
 export interface ActiveClaim {
   id: number;
@@ -14,7 +15,13 @@ export interface ActiveClaim {
   identity: string;
   /** Consecutive failed checks so far. */
   failures: number;
+  /** Stale claims are re-checked too: one that passes again goes back to active. */
+  status?: ClaimStatus;
 }
+
+/** Statuses that say nothing about the proof: provider rate limits, timeouts and server errors. */
+const isTransientStatus = (status: number, url: string) =>
+  status === 408 || status === 429 || status >= 500 || (status === 403 && url.startsWith("https://api.github.com/"));
 
 /** Consecutive real failures after which an active claim turns stale. */
 export const MAX_FAILURES = 2;
@@ -40,7 +47,11 @@ export async function checkReachable(
   let threw = false;
   const res = await check(toolUrl, identity, async (url) => {
     try {
-      return await fetcher(url);
+      const res = await fetcher(url);
+      // A provider error (rate limit, timeout, 5xx) is "could not check", never a failed proof.
+      // On the GitHub API a rate limit on any location leaves the proof unknown.
+      if (isTransientStatus(res.status, url) && (url === primary || url.startsWith("https://api.github.com/"))) threw = true;
+      return res;
     } catch (err) {
       if (url === primary) threw = true;
       throw err;
@@ -77,6 +88,9 @@ export interface ReverifyReport {
   pruned: number;
 }
 
+// Same reader as the claim flow: raw contents with the token, not the API's JSON envelope.
+const githubAwareFetcher = createGithubAwareFetcher(safeFetcher);
+
 const defaults: ReverifyDeps = {
   listActive: async () =>
     getDb()
@@ -85,18 +99,19 @@ const defaults: ReverifyDeps = {
         toolUrl: tools.url,
         identity: claims.identity,
         failures: claims.failures,
+        status: claims.status,
       })
       .from(claims)
       .innerJoin(tools, eq(tools.id, claims.toolId))
-      .where(eq(claims.status, "active")),
-  check: (toolUrl, identity) => checkReachable(toolUrl, identity, safeFetcher),
+      .where(inArray(claims.status, ["active", "stale"])),
+  check: (toolUrl, identity) => checkReachable(toolUrl, identity, githubAwareFetcher),
   // verifiedAt is the claim/approval date and feeds the 24h claim counter, so the cron only
   // touches lastCheckedAt.
   markOk: async (id, now) => {
     await getDb()
       .update(claims)
-      .set({ lastCheckedAt: now, failures: 0 })
-      .where(and(eq(claims.id, id), eq(claims.status, "active")));
+      .set({ status: "active", lastCheckedAt: now, failures: 0 })
+      .where(and(eq(claims.id, id), inArray(claims.status, ["active", "stale"])));
   },
   markFailed: async (id, now, failures) => {
     await getDb()
@@ -132,6 +147,9 @@ export async function runReverify(overrides: Partial<ReverifyDeps> = {}): Promis
     if (res.ok) {
       await deps.markOk(c.id, now);
       report.ok++;
+    } else if (c.status === "stale") {
+      // Already stale: nothing to demote, keep it listed for the next run.
+      return;
     } else if (c.failures + 1 >= MAX_FAILURES) {
       await deps.markStale(c.id, now, c.failures);
       report.staled++;
